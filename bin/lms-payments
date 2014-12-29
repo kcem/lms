@@ -108,6 +108,12 @@ my $check_invoices = $ini->val('payments', 'check_invoices') || 0;
 
 my $suspension_percentage = $ini->val('finances', 'suspension_percentage') || '0';
 
+# trim '" and \s* from begin and end of ini string values
+$customergroups =~ s/^\s*["']|["']\s*$//g;
+$comment =~ s/^\s*["']|["']\s*$//g;
+$s_comment =~ s/^\s*["']|["']\s*$//g;
+$suspension_description =~ s/^\s*["']|["']\s*$//g;
+
 my $dbase;
 my $utsfmt;
 
