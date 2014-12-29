@@ -128,17 +128,27 @@ else
 	exit 1;
 }
 
+my @fakedate;
+if ($fakedate) {
+	@fakedate = split(/[\/:\- ]/, $fakedate);
+    if (scalar @fakedate < 3) {
+        print STDERR "Error: Unknown fakedate format: $fakedate\nExpected: YYYY/MM/DD(-HH:MM:SS)\n";
+        exit 1;
+    }
+
+	$#fakedate = 5;  # expand/truncate
+	@fakedate = map { (defined $_) ? $_ : 0} @fakedate;  # change undef to 0
+	@fakedate = reverse @fakedate;
+	--($fakedate[4]);  # month fix to 0-11
+}
+
 sub localtime2()
 {
-	if($fakedate)
-	{
-		my @fakedate = split(/\//, $fakedate);
-		return localtime(timelocal(0,0,0,$fakedate[2],$fakedate[1]-1,$fakedate[0]));
-	}
-	else
-	{
-		return localtime();
-	}
+	if (@fakedate) {
+	    return localtime(timelocal(@fakedate));
+    }
+
+	return localtime();
 }
 
 sub is_leap_year($)
@@ -189,11 +199,7 @@ if(is_leap_year($year) && $yearday > 31+28) {
 }
 
 my $today;
-if($fakedate) {
-	$today = $currtime;
-} else {
-	$today = timelocal(0,0,0,$dom,$month-1,$year);
-}
+$today = timelocal(0,0,0,$dom,$month-1,$year);
 
 my $quarter;
 if($month==1 || $month==4 || $month==7 || $month==10) {
