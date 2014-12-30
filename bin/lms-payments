@@ -50,11 +50,11 @@ if($help)
 lms-payments, version $_version
 (C) 2001-2013 LMS Developers
 
--C, --config-file=/etc/lms/lms.ini	alternate config file (default: /etc/lms/lms.ini);
+-C, --config-file=<path>	alternate config file (default: /etc/lms/lms.ini);
 -h, --help			print this help and exit;
 -v, --version			print version info and exit;
 -q, --quiet			suppress any output, except errors;
--f, --fakedate=YYYY/MM/DD	override system date
+-f, --fakedate=<date>		override system date (date format: %Y/%m/%d[-%H:%M:%S]);
 
 EOF
 	exit 0;
