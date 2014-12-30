@@ -26,7 +26,7 @@ use strict;
 use DBI;
 use Config::IniFiles;
 use Getopt::Long;
-use vars qw($configfile $quiet $help $version $fakedate);
+use vars qw($configfile $quiet $help $version $fakedate $afterperiod);
 use POSIX qw(strftime);
 use POSIX qw(mktime);
 use Time::Local;
@@ -39,6 +39,7 @@ my %options = (
 	"--help|h"		=>	\$help,
 	"--version|v"		=>	\$version,
 	"--fakedate|f=s"	=>	\$fakedate,
+	"--afterperiod|a"	=>	\$afterperiod,
 );
 
 Getopt::Long::config("no_ignore_case");
@@ -55,6 +56,7 @@ lms-payments, version $_version
 -v, --version			print version info and exit;
 -q, --quiet			suppress any output, except errors;
 -f, --fakedate=<date>		override system date (date format: %Y/%m/%d[-%H:%M:%S]);
+-a, --afterperiod		invoicing after service period;
 
 EOF
 	exit 0;
@@ -236,54 +238,67 @@ if ($y_month > 12) {
 	$y_year += 1;
 }
 
-my %txts;
-$txts{+DAY} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900);
-$txts{+WEEK} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900)." - ".strftime("%Y/%m/%d", 0, 0, 12, $dom + 6, $month - 1, $year - 1900);
-$txts{+MONTH} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900)." - ".strftime("%Y/%m/%d", 0, 0, 12, $dom - 1, $month, $year - 1900);
-$txts{+QUARTER} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900)." - ".strftime("%Y/%m/%d", 0, 0, 12, $dom - 1, $q_month, $q_year - 1900);
-$txts{+HALFYEAR} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900)." - ".strftime("%Y/%m/%d", 0, 0, 12, $dom - 1, $y_month, $y_year - 1900);
-$txts{+YEAR} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900)." - ".strftime("%Y/%m/%d", 0, 0, 12, $dom - 1, $month - 1, $year - 1900 + 1);
-$txts{+DISPOSABLE} = strftime("%Y/%m/%d", 0, 0, 12, $dom, $month - 1, $year - 1900);
+sub get_period_range($$) {
+	my $period = shift;
+	my $inadvance = shift;
+
+	my ($begin, $end);
+
+	$begin = [$dom, $month - 1, $year - 1900];
+	my $e_dom = $dom;
+
+	for ($period) {
+		(/@{[DAY]}/ || /@{[DISPOSABLE]}/) && do {
+			$end = \@{$begin};
+			last;
+		};
+
+		/@{[WEEK]}/ && do {
+			$end = [($inadvance) ? $dom + 6 : $dom - 6, $month - 1, $year - 1900];
+			last;
+		};
+
+		$e_dom = ($inadvance) ? $e_dom - 1 : $e_dom + 1;
+		/@{[MONTH]}/ && do {
+			$end = [$e_dom, ($inadvance) ? $month : $month - 2, $year - 1900];
+			last;
+		};
+
+		/@{[QUARTER]}/ && do {
+			$end = [$e_dom, ($inadvance) ? $month + 2 : $month - 4, $year - 1900];
+			last;
+		};
+
+		/@{[HALFYEAR]}/ && do {
+			$end = [$e_dom, ($inadvance) ? $month + 5 : $month - 7, $year - 1900];
+			last;
+		};
+
+		/@{[YEAR]}/ && do {
+			$end = [$e_dom, $month - 1, ($inadvance) ? $year - 1900 + 1 : $year - 1900 - 1];
+			last;
+		};
+	}
+
+	my $result = ($inadvance) ? {begin => $begin, end => $end} : {begin => $end, end => $begin};
+
+	$result->{begin} = [0, 0, 0, @{$result->{begin}}];
+	$result->{end} = [59, 59, 23, @{$result->{end}}];
+
+	return $result;
+}
 
 sub period_format($$$) {
-	my $period = shift;
+	my $period_range = shift;
 	my $tip = shift;
 	my $format = shift;
 
-	if ($tip eq "begin") {
-		return strftime($format, 0, 0, 12, $dom, $month - 1, $year - 1900);
-	};
+	if ($tip eq "begin" || $tip eq "end") {
+		return strftime($format, @{$period_range->{$tip}});
+	}
 
-	$_ = $period;
-	/@{[DAY]}/ && do {
-		return strftime($format, 0, 0, 12, $dom, $month - 1, $year - 1900);
-	};
-
-	/@{[WEEK]}/ && do {
-		return strftime($format, 0, 0, 12, $dom + 6, $month - 1, $year - 1900);
-	};
-
-	/@{[MONTH]}/ && do {
-		return strftime($format, 0, 0, 12, $dom - 1, $month, $year - 1900);
-	};
-
-	/@{[QUARTER]}/ && do {
-		return strftime($format, 0, 0, 12, $dom - 1, $q_month, $q_year - 1900);
-	};
-
-	/@{[HALFYEAR]}/ && do {
-		return strftime($format, 0, 0, 12, $dom - 1, $y_month - 1, $y_year - 1900);
-	};
-
-	/@{[YEAR]}/ && do {
-		return strftime($format, 0, 0, 12, $dom - 1, $month - 1, $year - 1900 + 1);
-	};
-
-	/@{[DISPOSABLE]}/ && do {
-		return strftime($format, 0, 0, 12, $dom, $month - 1, $year - 1900);
-	};
-
-	return "<unknown>";
+	return strftime($format, @{$period_range->{begin}}) . " - "
+		. strftime($format, @{$period_range->{end}});
 }
 
 # special case, ie. you have 01.01.2005-01.31.2005 on invoice, but invoice/
@@ -398,6 +413,7 @@ if(! $suspension_percentage)
 }
 
 my %periods;
+my %periods_range;
 my %plans;
 my %numbers;
 my %numbertemplates;
@@ -540,11 +556,23 @@ while(my $assign = $dbq->fetchrow_hashref())
 	{
 		$desc = $assign->{'name'}; # you can use variables in names of tariffless liabilities
 	}
+
+	# prevent counting period ranges for every invoice
+	my $period_key = $assign->{'period'};
+	if (!exists $periods_range{$period_key}) {
+		$periods_range{$period_key} = get_period_range($assign->{'period'}, !$afterperiod);
+	};
+
+	my $c_period_range = $periods_range{$period_key};
+
 	$desc =~ s/\%tariff/$assign->{'name'}/g;
 	$desc =~ s/\%desc/$assign->{'description'}/g;
 	$desc =~ s/\%type/$tarifftypes{$assign->{'tarifftype'}}/g;
-	$desc =~ s/\%period_(begin|end)\(\s*["'](.*?)["']\s*\)/&period_format($assign->{'period'}, $1, $2)/ge;
-	$desc =~ s/\%period/$txts{$assign->{'period'}}/g;
+	$desc =~ s/\%period_(begin|end)\(\s*["'](.*?)["']\s*\)/&period_format($c_period_range, $1, $2)/ge;
+	$desc =~ s/\%period\(\s*["'](.*?)["']\s*\)/&period_format($c_period_range, 'both', $1)/ge;
+	$desc =~ s/\%period/&period_format($c_period_range, 'both', '%Y\/%m\/%d')/ge;
+
+	# this doesn't take into account period of invoice
 	$desc =~ s/\%current_month/$current_month/g;
 	$desc =~ s/\%current_period/$current_period/g;
 	$desc =~ s/\%next_period/$next_period/g;
@@ -721,7 +749,10 @@ while(my $assign = $dbq->fetchrow_hashref())
 		print STDERR "CID:$uid\tVAL:$val\tDESC:$desc\n" if not $quiet;
 
 		# settlements accounting
-		if ($assign->{'settlement'} && $assign->{'datefrom'})
+		# TODO(kcem): settlement in afterperiod
+		#  - invoice after first full period when settlement is set
+		#  - lower payments for incomplete period (when period begin < %assign->{'datefrom'})
+		if (!$afterperiod && $assign->{'settlement'} && $assign->{'datefrom'})
 		{
 			my $alldays = 1;
 			my $diffdays = sprintf("%d", ($today - $assign->{'datefrom'})/86400);
