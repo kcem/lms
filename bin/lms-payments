@@ -137,10 +137,10 @@ else
 my @fakedate;
 if ($fakedate) {
 	@fakedate = split(/[\/:\- ]/, $fakedate);
-    if (scalar @fakedate < 3) {
-        print STDERR "Error: Unknown fakedate format: $fakedate\nExpected: YYYY/MM/DD(-HH:MM:SS)\n";
-        exit 1;
-    }
+	if (scalar @fakedate < 3) {
+		print STDERR "Error: Unknown fakedate format: $fakedate\nExpected: YYYY/MM/DD(-HH:MM:SS)\n";
+		exit 1;
+	}
 
 	$#fakedate = 5;  # expand/truncate
 	@fakedate = map { (defined $_) ? $_ : 0} @fakedate;  # change undef to 0
@@ -151,8 +151,8 @@ if ($fakedate) {
 sub localtime2()
 {
 	if (@fakedate) {
-	    return localtime(timelocal(@fakedate));
-    }
+		return localtime(timelocal(@fakedate));
+	}
 
 	return localtime();
 }
