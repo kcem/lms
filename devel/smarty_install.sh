@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Smarty templates library quick installation (with sources download)
 #
