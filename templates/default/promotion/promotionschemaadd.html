@@ -55,7 +55,7 @@
 					<select name="schema[periods][{$key}]" {tip class="lms-ui-combobox" text="Select length of the period (in months)"}
 						data-value="{$period}" form="schemaadd">
 						{if !$key && count($schema.periods) == 1}
-							<option value="0"{if !$period} selected{/if}>- {trans("unlimited")} -</option>
+							<option value="0"{if !$period} selected{/if}>— {trans("unlimited")} —</option>
 						{/if}
 						{foreach $schema.selection as $item}
 							<option value="{$item}"{if $period == $item} selected{/if}>{$item}</option>
@@ -104,6 +104,41 @@
 			</td>
 		</tr>
 		<tr>
+			<td>
+				{icon name="import"}
+			</td>
+			<td class="nobr">
+				<strong>{trans("New files")}</strong>
+			</td>
+			<td>
+				{$item_custom_contents = array()}
+				{foreach $fileupload.attachments as $fileidx => $file}
+					{capture assign="item_custom_content"}{strip}
+						<label>
+							<input type="checkbox" name="fileupload[attachments][{$fileidx}][checked]"
+								value="1" form="schemaadd" {if $file.checked} checked{/if}>
+							{trans("default checked")}
+						</label>
+						<input size="10" type="text" name="fileupload[attachments][{$fileidx}][label]"
+							value="{$file.label}" form="schemaadd" placeholder="{trans("text label")}">
+					{/strip}{/capture}
+					{$item_custom_contents[] = $item_custom_content}
+				{/foreach}
+				{capture assign="new_item_custom_content"}{strip}
+					<label>
+						<input type="checkbox" name="fileupload[attachments][%idx%][checked]"
+							value="1" form="schemaadd">
+						{trans("default checked")}
+					</label>
+					<input size="10" type="text" name="fileupload[attachments][%idx%][label]"
+						value="" form="schemaadd" placeholder="{trans("text label")}">
+				{/strip}{/capture}
+				{fileupload id="attachments" fileupload=$fileupload form="schemaadd"
+					item_custom_contents=$item_custom_contents
+					new_item_custom_content=$new_item_custom_content}
+			</td>
+		</tr>
+		<tr>
 			<td class="lms-ui-box-buttons" colspan="3">
 				<div class="lms-ui-box-button-container">
 					{button type="submit" icon="save" label="Submit" form="schemaadd"}
@@ -146,7 +181,7 @@
 		$("#perioddel").click(function() {
 			var comboboxes = $('#periodcont .scombobox');
 			var select = $(comboboxes[0]).find('select');
-			select.prepend('<OPTION value="0">- ' + $t("unlimited") + ' -</OPTION>');
+			select.prepend('<OPTION value="0">— ' + $t("unlimited") + ' —</OPTION>');
 			$(comboboxes[0]).scombobox('fill');
 
 			$('#perioddel').prev().remove();

@@ -3,7 +3,7 @@
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2017 LMS Developers
+ *  (C) Copyright 2001-2023 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -113,6 +113,10 @@ define('CCONSENT_TRANSFERFORM', 7);
 define('CCONSENT_SMSNOTICE', 8);
 define('CCONSENT_SMS_MARKETING', 9);
 define('CCONSENT_MAIL_MARKETING', 10);
+define('CCONSENT_PHONE_BILLING', 11);
+define('CCONSENT_NONE_PHONE_BILLING', 12);
+define('CCONSENT_FULL_PHONE_BILLING', 13);
+define('CCONSENT_SIMPLIFIED_PHONE_BILLING', 14);
 
 $CCONSENTS = array(
     CCONSENT_DATE => array(
@@ -165,6 +169,27 @@ $CCONSENTS = array(
         'name' => 'transfer_form',
         'type' => 'boolean',
     ),
+    CCONSENT_PHONE_BILLING => array(
+        'label' => trans('phone billing'),
+        'name' => 'phone_billing',
+        'type' => 'selection',
+        'values' => array(
+            CCONSENT_NONE_PHONE_BILLING => array(
+                'label' => trans('<!billing-type>none'),
+            ),
+            CCONSENT_SIMPLIFIED_PHONE_BILLING => array(
+                'label' => trans('<!billing-type>simplified'),
+                'name' => 'simplified_phone_billing',
+            ),
+            CCONSENT_FULL_PHONE_BILLING => array(
+                'label' => trans('<!billing-type>full'),
+                'name' => 'full_phone_billing',
+            ),
+        ),
+    ),
+    CCONSENT_NONE_PHONE_BILLING => CCONSENT_PHONE_BILLING,
+    CCONSENT_SIMPLIFIED_PHONE_BILLING => CCONSENT_PHONE_BILLING,
+    CCONSENT_FULL_PHONE_BILLING => CCONSENT_PHONE_BILLING,
 );
 
 // Config types
@@ -180,9 +205,10 @@ define('CONFIG_TYPE_RICHTEXT', 8);
 define('CONFIG_TYPE_MAIL_BACKEND', 9);
 define('CONFIG_TYPE_MAIL_SECURE', 10);
 define('CONFIG_TYPE_DATE_FORMAT', 11);
+define('CONFIG_TYPE_EMAILS', 12);
 
 $CONFIG_TYPES = array(
-    CONFIG_TYPE_AUTO => trans('- auto -'),
+    CONFIG_TYPE_AUTO => trans('— auto —'),
     CONFIG_TYPE_NONE => trans('none'),
     CONFIG_TYPE_BOOLEAN => trans('boolean'),
     CONFIG_TYPE_POSITIVE_INTEGER => trans('integer greater than 0'),
@@ -194,6 +220,7 @@ $CONFIG_TYPES = array(
     CONFIG_TYPE_MAIL_BACKEND => trans('mail backend'),
     CONFIG_TYPE_MAIL_SECURE => trans('mail security protocol'),
     CONFIG_TYPE_DATE_FORMAT => trans('date format'),
+    CONFIG_TYPE_EMAILS => trans('comma separated emails'),
 );
 
 // Helpdesk ticket status
@@ -615,11 +642,11 @@ define('DOC_PROTOCOL', -3);
 define('DOC_ORDER', -4);
 define('DOC_SHEET', -5);
 define('DOC_BREACH', -6);
-define('DOC_PAYMENTBOOK', -7);
-define('DOC_PAYMENTSUMMONS', -8);
-define('DOC_PAYMENTPRESUMMONS', -9);
+define('DOC_PAYMENT_BOOK', -7);
+define('DOC_PAYMENT_SUMMON', -8);
+define('DOC_PAYMENT_PRESUMMON', -9);
 define('DOC_BILLING', -10);
-define('DOC_PRICELIST', -11);
+define('DOC_PRICE_LIST', -11);
 define('DOC_PROMOTION', -12);
 define('DOC_WARRANTY', -13);
 define('DOC_REGULATIONS', -14);
@@ -645,10 +672,10 @@ $DOCTYPES = array(
     DOC_ORDER       =>  trans('order'), //zamowienie
     DOC_SHEET       =>  trans('customer sheet'), // karta klienta
     DOC_BREACH      =>  trans('contract termination'), //rozwiazanie umowy
-    DOC_PAYMENTBOOK  => trans('payments book'), // ksiazeczka oplat
-    DOC_PAYMENTSUMMONS  => trans('payment summons'), // wezwanie do zapłaty
-    DOC_PAYMENTPRESUMMONS  => trans('payment pre-summons'), // przedsądowe wezw. do zapłaty
-    DOC_PRICELIST       =>  trans('price-list'), // cennik
+    DOC_PAYMENT_BOOK  => trans('payment book'), // ksiazeczka oplat
+    DOC_PAYMENT_SUMMON  => trans('payment summon'), // wezwanie do zapłaty
+    DOC_PAYMENT_PRESUMMON  => trans('payment pre-summon'), // przedsądowe wezw. do zapłaty
+    DOC_PRICE_LIST       =>  trans('price-list'), // cennik
     DOC_PROMOTION       =>  trans('promotion'), // promocja
     DOC_WARRANTY       =>  trans('warranty'), // gwarancja
     DOC_REGULATIONS       =>  trans('regulations'), // regulamin
@@ -657,12 +684,33 @@ $DOCTYPES = array(
     DOC_OTHER       =>  trans('other'),
 );
 
+$DOCTYPE_ALIASES = array(
+    DOC_OFFER => 'offer',
+    DOC_BILLING => 'billing',
+    DOC_CONTRACT => 'contract',
+    DOC_ANNEX => 'annex',
+    DOC_PROTOCOL => 'protocol',
+    DOC_ORDER => 'order',
+    DOC_SHEET => 'sheet',
+    DOC_BREACH => 'contract-termination',
+    DOC_PAYMENT_BOOK => 'payment-book',
+    DOC_PAYMENT_SUMMON  => 'payment-summon',
+    DOC_PAYMENT_PRESUMMON  => 'payment-pre-summon',
+    DOC_PRICE_LIST => 'price-list',
+    DOC_PROMOTION => 'promotion',
+    DOC_WARRANTY => 'warranty',
+    DOC_REGULATIONS => 'regulations',
+    DOC_CONF_FILE => 'configuration-file',
+    DOC_COMPLAINT => 'complaint',
+    DOC_OTHER => 'other',
+);
+
 // for all document types
 define('DOC_OPEN', 0);
 define('DOC_CLOSED', 1);
 // for document types < 0
-define('DOC_CLOSED_AFTER_CUSTOMER_SMS', 2);
-define('DOC_CLOSED_AFTER_CUSTOMER_SCAN', 3);
+define('DOC_CLOSED_AFTER_CUSTOMER_SCAN', 2);
+define('DOC_CLOSED_AFTER_CUSTOMER_SMS', 3);
 
 define('DOC_FLAG_RECEIPT', 1);
 define('DOC_FLAG_TELECOM_SERVICE', 2);
@@ -734,6 +782,16 @@ $PERIODS = array(
     DISPOSABLE  =>  trans('disposable')
 );
 
+$BILLING_PERIODS = array(
+    DISPOSABLE => ConfigHelper::getConfig('assignments.billing_period_disposable', trans('disposable')),
+    DAILY => ConfigHelper::getConfig('assignments.billing_period_daily', trans('daily')),
+    WEEKLY => ConfigHelper::getConfig('assignments.billing_period_weekly', trans('weekly')),
+    MONTHLY => ConfigHelper::getConfig('assignments.billing_period_monthly', trans('monthly')),
+    QUARTERLY => ConfigHelper::getConfig('assignments.billing_period_quarterly', trans('quarterly')),
+    HALFYEARLY => ConfigHelper::getConfig('assignments.billing_period_half_yearly', trans('half-yearly')),
+    YEARLY => ConfigHelper::getConfig('assignments.billing_period_yearly', trans('yearly')),
+);
+
 // Numbering periods
 $NUM_PERIODS = array(
     CONTINUOUS  =>  trans('continuously'),
@@ -781,15 +839,24 @@ $TARIFF_FLAGS = array(
 define('LIABILITY_FLAG_NET_ACCOUT', 16);
 define('LIABILITY_FLAG_SPLIT_PAYMENT', 32);
 
-// VoIP call types
-define('CALL_INCOMING', 1);
-define('CALL_OUTGOING', 2);
+// VoIP call directions
+define('BILLING_RECORD_DIRECTION_INCOMING', 1);
+define('BILLING_RECORD_DIRECTION_OUTGOING', 2);
 
-// VoIP call status
-define('CALL_BUSY', 1);
-define('CALL_ANSWERED', 2);
-define('CALL_NO_ANSWER', 3);
-define('CALL_SERVER_FAILED', 4);
+// VoIP call types
+define('BILLING_RECORD_TYPE_VOICE_CALL', 0);
+define('BILLING_RECORD_TYPE_CALL', BILLING_RECORD_TYPE_VOICE_CALL);
+define('BILLING_RECORD_TYPE_SMS', 1);
+define('BILLING_RECORD_TYPE_MMS', 2);
+define('BILLING_RECORD_TYPE_DATA_TRANSFER', 3);
+define('BILLING_RECORD_TYPE_VIDEO_CALL', 4);
+
+// VoIP call statuses
+define('BILLING_RECORD_STATUS_BUSY', 1);
+define('BILLING_RECORD_STATUS_ANSWERED', 2);
+define('BILLING_RECORD_STATUS_NO_ANSWER', 3);
+define('BILLING_RECORD_STATUS_SERVER_FAILED', 4);
+define('BILLING_RECORD_STATUS_UNKNOWN', 5);
 
 // VoIP pool number types
 define('VOIP_POOL_NUMBER_MOBILE', 1);
@@ -801,31 +868,85 @@ $VOIP_POOL_NUMBER_TYPES = array(
 );
 
 // bit flags for VoIP call
-define('CALL_FLAG_ADMIN_RECORDING', 1);
-define('CALL_FLAG_CUSTOMER_RECORDING', 2);
+define('BILLING_RECORD_FLAG_ADMIN_RECORDING', 1);
+define('BILLING_RECORD_FLAG_CUSTOMER_RECORDING', 2);
+
+define('VOIP_ACCOUNT_FLAG_ADMIN_RECORDING', BILLING_RECORD_FLAG_ADMIN_RECORDING);
+define('VOIP_ACCOUNT_FLAG_CUSTOMER_RECORDING', BILLING_RECORD_FLAG_CUSTOMER_RECORDING);
+define('VOIP_ACCOUNT_FLAG_TRUNK', 4);
 
 $SERVICETYPES = array(
-    SERVICE_OTHER => ConfigHelper::getConfig('tarifftypes.other', trans('other')),
-    SERVICE_INTERNET => ConfigHelper::getConfig('tarifftypes.internet', trans('internet')),
-    SERVICE_HOSTING => ConfigHelper::getConfig('tarifftypes.hosting', trans('hosting')),
-    SERVICE_SERVICE => ConfigHelper::getConfig('tarifftypes.service', trans('service')),
-    SERVICE_PHONE => ConfigHelper::getConfig('tarifftypes.phone', trans('phone')),
-    SERVICE_TV => ConfigHelper::getConfig('tarifftypes.tv', trans('tv')),
-    SERVICE_TRANSMISSION => ConfigHelper::getConfig('tarifftypes.transmission', trans('transmission')),
+    SERVICE_OTHER => ConfigHelper::getConfig('assignments.type_other', ConfigHelper::getConfig('tarifftypes.other', trans('other'))),
+    SERVICE_INTERNET => ConfigHelper::getConfig('assignments.type_internet', ConfigHelper::getConfig('tarifftypes.internet', trans('internet'))),
+    SERVICE_HOSTING => ConfigHelper::getConfig('assignments.type_hosting', ConfigHelper::getConfig('tarifftypes.hosting', trans('hosting'))),
+    SERVICE_SERVICE => ConfigHelper::getConfig('assignments.type_service', ConfigHelper::getConfig('tarifftypes.service', trans('service'))),
+    SERVICE_PHONE => ConfigHelper::getConfig('assignments.type_phone', ConfigHelper::getConfig('tarifftypes.phone', trans('phone'))),
+    SERVICE_TV => ConfigHelper::getConfig('assignments.type_tv', ConfigHelper::getConfig('tarifftypes.tv', trans('tv'))),
+    SERVICE_TRANSMISSION => ConfigHelper::getConfig('assignments.type_transmission', ConfigHelper::getConfig('tarifftypes.transmission', trans('transmission'))),
 );
 
+define('INVOICE_FEATURE_DEADLINE', 1);
+define('INVOICE_FEATURE_TO_PAY', 2);
+define('INVOICE_FEATURE_TRANSFER_FORM', 4);
+define('INVOICE_FEATURE_AUTO_PAYMENT', 8);
+
+define('PAYTYPE_CASH', 1);
+define('PAYTYPE_TRANSFER', 2);
+define('PAYTYPE_TRANSFER_CASH', 3);
+define('PAYTYPE_CARD', 4);
+define('PAYTYPE_COMPENSATION', 5);
+define('PAYTYPE_BARTER', 6);
+define('PAYTYPE_CONTRACT', 7);
+define('PAYTYPE_PAID', 8);
+define('PAYTYPE_CASH_ON_DELIVERY', 9);
+define('PAYTYPE_INSTALMENTS', 10);
+define('PAYTYPE_BANK_LOAN', 11);
+
 $PAYTYPES = array(
-    1   => 'cash',
-    2   => 'transfer',
-    3   => 'transfer/cash',
-    4   => 'card',
-    5   => 'compensation',
-    6   => 'barter',
-    7   => 'contract',
-    8   => 'paid',
-    9   => 'cash on delivery',
-    10  => 'instalments',
-    11  => 'bank loan',
+    PAYTYPE_CASH => array(
+        'label' => 'cash',
+        'features' => INVOICE_FEATURE_AUTO_PAYMENT,
+    ),
+    PAYTYPE_TRANSFER => array(
+        'label' => 'transfer',
+        'features' => INVOICE_FEATURE_DEADLINE | INVOICE_FEATURE_TO_PAY | INVOICE_FEATURE_TRANSFER_FORM,
+    ),
+    PAYTYPE_TRANSFER_CASH  => array(
+        'label' => 'transfer/cash',
+        'features' => INVOICE_FEATURE_DEADLINE | INVOICE_FEATURE_TO_PAY | INVOICE_FEATURE_TRANSFER_FORM,
+    ),
+    PAYTYPE_CARD => array(
+        'label' => 'card',
+        'features' => INVOICE_FEATURE_AUTO_PAYMENT,
+    ),
+    PAYTYPE_COMPENSATION => array(
+        'label' => 'compensation',
+        'features' => INVOICE_FEATURE_AUTO_PAYMENT,
+    ),
+    PAYTYPE_BARTER => array(
+        'label' => 'barter',
+        'features' => INVOICE_FEATURE_AUTO_PAYMENT,
+    ),
+    PAYTYPE_CONTRACT => array(
+        'label' => 'contract',
+        'features' => INVOICE_FEATURE_DEADLINE | INVOICE_FEATURE_TO_PAY | INVOICE_FEATURE_TRANSFER_FORM,
+    ),
+    PAYTYPE_PAID => array(
+        'label' => 'paid',
+        'features' => INVOICE_FEATURE_AUTO_PAYMENT,
+    ),
+    PAYTYPE_CASH_ON_DELIVERY  => array(
+        'label' => 'cash on delivery',
+        'features' => INVOICE_FEATURE_DEADLINE | INVOICE_FEATURE_TO_PAY | INVOICE_FEATURE_TRANSFER_FORM,
+    ),
+    PAYTYPE_INSTALMENTS => array(
+        'label' => 'instalments',
+        'features' => INVOICE_FEATURE_DEADLINE | INVOICE_FEATURE_TO_PAY | INVOICE_FEATURE_TRANSFER_FORM,
+    ),
+    PAYTYPE_BANK_LOAN => array(
+        'label' => 'bank loan',
+        'features' => INVOICE_FEATURE_DEADLINE | INVOICE_FEATURE_TO_PAY | INVOICE_FEATURE_TRANSFER_FORM,
+    ),
 );
 
 // Contact types
@@ -846,6 +967,7 @@ define('CONTACT_IM_FACEBOOK', 4096);
 define('CONTACT_DISABLED', 16384);
 define('CONTACT_DOCUMENTS', 32768);
 define('CONTACT_REPRESENTATIVE', 65536);
+define('CONTACT_HELPDESK_NOTIFICATIONS', 131072);
 
 $CONTACTTYPES = array(
     CONTACT_MOBILE          =>  trans('mobile'),
@@ -860,6 +982,7 @@ $CONTACTTYPES = array(
     CONTACT_IM_FACEBOOK     =>  trans('Facebook'),
     CONTACT_DOCUMENTS       =>  trans('documents'),
     CONTACT_REPRESENTATIVE  =>  trans('representative'),
+    CONTACT_HELPDESK_NOTIFICATIONS =>  trans('helpdesk'),
 );
 
 define('DISCOUNT_PERCENTAGE', 1);
@@ -872,8 +995,8 @@ $DISCOUNTTYPES = array(
 
 define('DAY_MONDAY', 0);
 define('DAY_TUESDAY', 1);
-define('DAY_THURSDAY', 2);
-define('DAY_WEDNESDAY', 3);
+define('DAY_WEDNESDAY', 2);
+define('DAY_THURSDAY', 3);
 define('DAY_FRIDAY', 4);
 define('DAY_SATURDAY', 5);
 define('DAY_SUNDAY', 6);
@@ -881,8 +1004,8 @@ define('DAY_SUNDAY', 6);
 $DAYS = array(
     DAY_MONDAY  => trans('Mon'),
     DAY_TUESDAY => trans('Tue'),
-    DAY_THURSDAY    => trans('Thu'),
     DAY_WEDNESDAY   => trans('Wed'),
+    DAY_THURSDAY    => trans('Thu'),
     DAY_FRIDAY  => trans('Fri'),
     DAY_SATURDAY    => trans('Sat'),
     DAY_SUNDAY  => trans('Sun'),
@@ -898,7 +1021,7 @@ $LINKTYPES = array(
     LINKTYPE_FIBER    => trans('fiber'),
 );
 
-$LINKTECHNOLOGIES = array(
+$SIIS_LINKTECHNOLOGIES = array(
     0 => array(
         1 => 'ADSL',
         2 => 'ADSL2',
@@ -915,6 +1038,8 @@ $LINKTECHNOLOGIES = array(
         50 => '(EURO)DOCSIS 1.x',
         51 => '(EURO)DOCSIS 2.x',
         52 => '(EURO)DOCSIS 3.x',
+        53 => 'COAXDATA',
+        54 => 'ATV',
     ),
     1 => array(
         100 => 'WiFi - 2,4 GHz',
@@ -932,6 +1057,8 @@ $LINKTECHNOLOGIES = array(
         112 => 'LTE',
         113 => 'UMTS',
         114 => 'DMS',
+        115 => 'FWA',
+        116 => '5G',
     ),
     2 => array(
         200 => 'CWDM',
@@ -950,8 +1077,207 @@ $LINKTECHNOLOGIES = array(
         250 => '(EURO)DOCSIS 1.x',
         251 => '(EURO)DOCSIS 2.x',
         252 => '(EURO)DOCSIS 3.x',
+        253 => 'ATV',
     ),
 );
+
+$LINKTECHNOLOGIES = array(
+    0 => array(
+        1 => 'ADSL',
+        2 => 'ADSL2',
+        3 => 'ADSL2+',
+        4 => 'VDSL',
+        5 => 'VDSL2',
+        13 => 'VDSL2(vectoring)',
+        14 => 'G.Fast',
+        50 => '(EURO)DOCSIS 1.x',
+        51 => '(EURO)DOCSIS 2.x',
+        52 => '(EURO)DOCSIS 3.x',
+        6 => '10 Mb/s Ethernet',
+        7 => '100 Mb/s Fast Ethernet',
+        8 => '1 Gigabit Ethernet',
+        15 => '2,5 Gigabit Ethernet',
+        16 => '5 Gigabit Ethernet',
+        9 => '10 Gigabit Ethernet',
+        11 => 'SDH/PDH',
+        17 => 'MoCA',
+        18 => 'EoC',
+        53 => 'CoaxData',
+    ),
+    1 => array(
+        117 => 'WiFi – 802.11a w paśmie 5GHz',
+        118 => 'WiFi – 802.11b w paśmie 2.4GHz',
+        119 => 'WiFi – 802.11g w paśmie 2.4GHz',
+        100 => 'WiFi – 802.11n w paśmie 2.4GHz',
+        120 => 'WiFi – 802.11n w paśmie 5GHz',
+        101 => 'WiFi – 802.11ac w paśmie 5GHz',
+        121 => 'WiFi – 802.11ax w paśmie 2.4GHz',
+        122 => 'WiFi – 802.11ax w paśmie 5GHz',
+        123 => 'WiFi – 802.11ax w paśmie 6GHz',
+        124 => 'WiFi – 802.11ad w paśmie 60GHz',
+        102 => 'WiMAX',
+        103 => 'LMDS',
+        104 => 'radiolinia',
+        106 => '2G/GSM (w tym GPRS oraz EDGE)',
+        //107 => 'EDGE',
+        152 => '3G/CDMA2000',
+        113 => '3G/UMTS',
+        108 => '3G/HSPA',
+        109 => '3G/HSPA+',
+        150 => '3G/DC-HSPA',
+        110 => '3G/DC-HSPA+',
+        151 => '3G/MC-HSPA',
+        111 => '3G/MC-HSPA+',
+        112 => '4G/LTE',
+        153 => '4G/LTE-A',
+        154 => '4G/LTE-Pro',
+        155 => '5G/NR SA',
+        156 => '5G/NR NSA',
+    ),
+    2 => array(
+        200 => 'CWDM',
+        201 => 'DWDM',
+        202 => 'SDH/PDH',
+        203 => '10 Mb/s Ethernet',
+        204 => '100 Mb/s Fast Ethernet',
+        205 => '1 Gigabit Ethernet',
+        213 => '2,5 Gigabit Ethernet',
+        214 => '5 Gigabit Ethernet',
+        206 => '10 Gigabit Ethernet',
+        215 => '25 Gigabit Ethernet',
+        210 => '40 Gigabit Ethernet',
+        207 => '100 Gigabit Ethernet',
+        208 => 'EPON',
+        216 => '10G-EPON',
+        209 => 'GPON',
+        219 => 'NGPON1 (XGPON)',
+        220 => 'NGPON2 (XGPON)',
+        221 => 'XGSPON',
+        222 => '25G PON',
+        223 => 'MoCA',
+        224 => 'EoC',
+        250 => '(EURO)DOCSIS 1.x',
+        251 => '(EURO)DOCSIS 2.x',
+        252 => '(EURO)DOCSIS 3.x',
+    ),
+);
+
+$allowed_link_technologies = trim(ConfigHelper::getConfig('phpui.allowed_link_technologies', '', true));
+if (strlen($allowed_link_technologies)) {
+    $allowed_link_technologies = array_filter(
+        preg_split("/([\s]+|[\s]*,[\s]*)/", $allowed_link_technologies, -1, PREG_SPLIT_NO_EMPTY),
+        function ($link_technology) {
+            return ctype_digit($link_technology);
+        }
+    );
+    if (!empty($allowed_link_technologies)) {
+        $allowed_link_technologies = array_flip($allowed_link_technologies);
+        foreach ($LINKTECHNOLOGIES as $linktype => &$linktechnologies) {
+            foreach ($linktechnologies as $linktechnology_idx => $linktechnology) {
+                if (!isset($allowed_link_technologies[$linktechnology_idx])) {
+                    unset($linktechnologies[$linktechnology_idx]);
+                }
+            }
+            if (empty($linktechnologies)) {
+                unset($LINKTECHNOLOGIES[$linktype]);
+            }
+        }
+        unset($linktechnologies);
+    }
+}
+
+$SIDUSIS_LINKTECHNOLOGIES = array(
+    LINKTYPE_WIRE => array(
+        1 => 'ADSL',
+        2 => 'ADSL2',
+        3 => 'ADSL2+',
+        4 => 'VDSL',
+        5 => 'VDSL2',
+        13 => 'VDSL2(vectoring)',
+        14 => 'G.Fast',
+        50 => '(EURO)DOCSIS 1.x',
+        51 => '(EURO)DOCSIS 2.x',
+        52 => '(EURO)DOCSIS 3.x',
+        6 => '10 Mb/s Ethernet',
+        7 => '100 Mb/s Fast Ethernet',
+        8 => '1 Gigabit Ethernet',
+        15 => '2,5 Gigabit Ethernet',
+        16 => '5 Gigabit Ethernet',
+        9 => '10 Gigabit Ethernet',
+        11 => 'SDH/PDH',
+        17 => 'MoCA',
+        18 => 'EoC',
+    ),
+    LINKTYPE_WIRELESS => array(
+        112 => 'LTE',
+        117 => 'LTE-A',
+        118 => 'LTE-Pro',
+        119 => 'NR SA',
+        120 => 'NR NSA',
+        150 => 'inna',
+    ),
+    LINKTYPE_FIBER => array(
+        250 => '(EURO)DOCSIS 1.x',
+        251 => '(EURO)DOCSIS 2.x',
+        252 => '(EURO)DOCSIS 3.x',
+        203 => '10 Mb/s Ethernet',
+        204 => '100 Mb/s Fast Ethernet',
+        205 => '1 Gigabit Ethernet',
+        213 => '2,5 Gigabit Ethernet',
+        214 => '5 Gigabit Ethernet',
+        206 => '10 Gigabit Ethernet',
+        215 => '25 Gigabit Ethernet',
+        207 => '100 Gigabit Ethernet',
+        217 => 'CWDM',
+        218 => 'DWDM',
+        212 => 'SDH/PDH',
+        208 => 'EPON',
+        216 => '10G-EPON',
+        209 => 'GPON',
+        219 => 'NGPON1 (XGPON)',
+        220 => 'NGPON2 (XGPON)',
+        221 => 'XGSPON',
+        222 => '25G PON',
+        223 => 'MoCA',
+        224 => 'EoC',
+    ),
+);
+
+$allowed_link_technologies = trim(ConfigHelper::getConfig(
+    'uke.sidusis_allowed_link_technologies',
+    ConfigHelper::getConfig(
+        'sidusis.allowed_link_technologies',
+        ConfigHelper::getConfig(
+            'phpui.allowed_link_technologies',
+            '',
+            true
+        ),
+        true
+    ),
+    true
+));
+if (strlen($allowed_link_technologies)) {
+    $allowed_link_technologies = array_filter(
+        preg_split("/([\s]+|[\s]*,[\s]*)/", $allowed_link_technologies, -1, PREG_SPLIT_NO_EMPTY),
+        function ($link_technology) {
+            return ctype_digit($link_technology);
+        }
+    );
+    if (!empty($allowed_link_technologies)) {
+        $allowed_link_technologies = array_flip($allowed_link_technologies);
+        foreach ($SIDUSIS_LINKTECHNOLOGIES as $linktype => &$linktechnologies) {
+            foreach ($linktechnologies as $linktechnology_idx => $linktechnology) {
+                if (!isset($allowed_link_technologies[$linktechnology_idx])) {
+                    unset($linktechnologies[$linktechnology_idx]);
+                }
+            }
+            if (empty($linktechnologies)) {
+                unset($SIDUSIS_LINKTECHNOLOGIES[$linktype]);
+            }
+        }
+        unset($linktechnologies);
+    }
+}
 
 $LINKSPEEDS = array(
     10000       => trans('10Mbit/s'),
@@ -994,21 +1320,63 @@ $NETELEMENTSTATUSES = array(
 );
 
 $NETELEMENTTYPES = array(
-    0   => trans('<!netelemtype>office building'),
+    21  => trans('<!netelemtype>office building'),
     2   => trans('<!netelemtype>residential building'),
     1   => trans('<!netelemtype>industrial building'),
     11  => trans('<!netelemtype>service building'),
     12  => trans('<!netelemtype>public building'),
     3   => trans('<!netelemtype>religious building'),
     13  => trans('<!netelemtype>power grid object'),
-    5   => trans('<!netelemtype>tower'),
-    4   => trans('<!netelemtype>mast'),
     10  => trans('<!netelemtype>chimney'),
-    6   => trans('<!netelemtype>container'),
-    7   => trans('<!netelemtype>street cabinet'),
+    17  => trans('<!netelemtype>cable cabinet'),
+    9   => trans('<!netelemtype>well'),
+    20  => trans('<!netelemtype>cable joint'),
+    8   => trans('<!netelemtype>cable box'),
+    6   => trans('<!netelemtype>telecommunication container'),
+    19  => trans('<!netelemtype>telecommunication post'),
+    18  => trans('<!netelemtype>cable post'),
+    7   => trans('<!netelemtype>telecommunication cabinet'),
+    16  => trans('<!netelemtype>cable connector'),
+    15  => trans('<!netelemtype>lighting mast'),
+    4   => trans('<!netelemtype>telecommunication mast'),
     14  => trans('<!netelemtype>pole'),
-    8   => trans('<!netelemtype>box'),
-    9   => trans('<!netelemtype>cable well'),
+    5   => trans('<!netelemtype>telecommunication tower'),
+);
+
+$NETELEMENTTYPEGROUPS = array(
+    trans('building objects (SIIS)') => array(
+        21 => true,
+        2 => true,
+        1 => true,
+        11 => true,
+        12 => true,
+        3 => true,
+        13 => true,
+        10 => true,
+    ),
+    trans('infrastructure elements (PIT)') => array(
+        17 => true,
+        9 => true,
+        20 => true,
+        8 => true,
+        6 => true,
+        19 => true,
+        18 => true,
+        7 => true,
+        16 => true,
+        15 => true,
+        4 => true,
+        14 => true,
+        5 => true,
+    ),
+);
+
+$NETWORK_DUCT_TYPES = array(
+    1 => trans('underground (placed directly in the ground)'),
+    2 => trans('placed in cable ducts (including cable pipeline, microducts)'),
+    3 => trans('placed in the technological channel'),
+    4 => trans('above-ground on telecommunication pole foundation'),
+    5 => trans('overground on power, lighting or traction foundation'),
 );
 
 $NETELEMENTOWNERSHIPS = array(
@@ -1059,29 +1427,59 @@ define('EVENT_VACATION', 6);
 define('EVENT_DUTY', 7);
 define('EVENT_PHONE', 8);
 define('EVENT_TV', 9);
+define('EVENT_TECHNICAL_VERIFICATION', 10);
 
 $EVENTTYPES = array(
-    EVENT_OTHER => trans('other'),
-    EVENT_NETWORK => trans('network'),
-    EVENT_SERVICE => trans('service<!event>'),
-    EVENT_INSTALLATION => trans('installation'),
-    EVENT_MEETING => trans('meeting'),
-    EVENT_VACATION => trans('vacation'),
-    EVENT_DUTY => trans('duty'),
-    EVENT_PHONE => trans('phone'),
-    EVENT_TV => trans('tv'),
-);
-
-$EVENTSTYLES = array(
-    EVENT_OTHER => 'background-color: gray; color: white;',
-    EVENT_NETWORK => 'background-color: blue; color: white;',
-    EVENT_SERVICE => 'background-color: red; color: white;',
-    EVENT_INSTALLATION => 'background-color: green; color: white;',
-    EVENT_MEETING => 'background-color: gold; color: black;',
-    EVENT_VACATION => 'background-color: white; color: black;',
-    EVENT_DUTY => 'background-color: brown; color: white;',
-    EVENT_PHONE => 'background-color: yellow; color: black;',
-    EVENT_TV => 'background-color: greenyellow; color: blue;',
+    EVENT_OTHER => array(
+        'label' => 'other',
+        'style' => 'background-color: gray; color: white;',
+        'alias' => 'other',
+    ),
+    EVENT_NETWORK => array(
+        'label' => 'network',
+        'style' => 'background-color: blue; color: white;',
+        'alias' => 'network',
+    ),
+    EVENT_SERVICE => array(
+        'label' => 'service<!event>',
+        'style' => 'background-color: red; color: white;',
+        'alias' => 'service',
+    ),
+    EVENT_INSTALLATION => array(
+        'label' => 'installation',
+        'style' => 'background-color: green; color: white;',
+        'alias'=> 'installation',
+    ),
+    EVENT_MEETING => array(
+        'label' => 'meeting',
+        'style' => 'background-color: gold; color: black;',
+        'alias' => 'meeting',
+    ),
+    EVENT_VACATION => array(
+        'label' => 'vacation',
+        'style' => 'background-color: white; color: black;',
+        'alias' => 'vacation',
+    ),
+    EVENT_DUTY => array(
+        'label' => 'duty',
+        'style' => 'background-color: brown; color: white;',
+        'alias' => 'duty',
+    ),
+    EVENT_PHONE => array(
+        'label' => 'phone',
+        'style' => 'background-color: yellow; color: black;',
+        'alias' => 'phone',
+    ),
+    EVENT_TV => array(
+        'label' => 'tv',
+        'style' => 'background-color: greenyellow; color: blue;',
+        'alias' => 'tv',
+    ),
+    EVENT_TECHNICAL_VERIFICATION => array(
+        'label' => 'technical verification',
+        'style' => 'background-color: #30D5C8; color: black;',
+        'alias' => 'technical_verification',
+    ),
 );
 
 define('SESSIONTYPE_PPPOE', 1);
@@ -1282,10 +1680,11 @@ if (isset($SMARTY)) {
     $SMARTY->assign('_PASSWDEXPIRATIONS', $PASSWDEXPIRATIONS);
     $SMARTY->assign('_NETELEMENTSTATUSES', $NETELEMENTSTATUSES);
     $SMARTY->assign('_NETELEMENTTYPES', $NETELEMENTTYPES);
+    $SMARTY->assign('_NETELEMENTTYPEGROUPS', $NETELEMENTTYPEGROUPS);
+    $SMARTY->assign('_NETWORK_DUCT_TYPES', $NETWORK_DUCT_TYPES);
     $SMARTY->assign('_NETELEMENTOWNERSHIPS', $NETELEMENTOWNERSHIPS);
     $SMARTY->assign('_USERPANEL_AUTH_TYPES', $USERPANEL_AUTH_TYPES);
-    $SMARTY->assign('_EVENTTYPES', $EVENTTYPES);
-    $SMARTY->assign('_EVENTSTYLES', $EVENTSTYLES);
+    $SMARTY->assignByRef('_EVENTTYPES', $EVENTTYPES);
     $SMARTY->assign('_SESSIONTYPES', $SESSIONTYPES);
     $SMARTY->assign('_EXISTINGASSIGNMENTS', $EXISTINGASSIGNMENTS);
     $SMARTY->assign('_CURRENCIES', $CURRENCIES);

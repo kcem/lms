@@ -29,6 +29,8 @@ class LMSNetNodeManager extends LMSManager implements LMSNetNodeManagerInterface
 
     public function GetNetNodeList($search, $order)
     {
+        $order = isset($order) ? $order : 'name,asc';
+
         list ($order, $dir) = sscanf($order, '%[^,],%s');
         ($dir == 'desc') ? $dir = 'desc' : $dir = 'asc';
         $short = isset($search['short']) && !empty($search['short']);
@@ -61,6 +63,9 @@ class LMSNetNodeManager extends LMSManager implements LMSNetNodeManagerInterface
                 break;
             case 'lastinspectiontime':
                 $ostr = 'ORDER BY n.lastinspectiontime';
+                break;
+            case 'netdevcount':
+                $ostr = 'ORDER BY netdevcount.netdevcount';
                 break;
             case 'name':
             default:
@@ -134,6 +139,7 @@ class LMSNetNodeManager extends LMSManager implements LMSNetNodeManagerInterface
                 'SELECT n.id, n.name' . ($short ? ''
                     : ', n.type, n.status, n.invprojectid, n.info, n.lastinspectiontime, p.name AS project,
                     n.divisionid, d.shortname AS division, longitude, latitude, ownership, coowner, uip, miar,
+                    netdevcount.netdevcount,
                     lc.ident AS location_city_ident,
                     (CASE WHEN lst.ident IS NULL
                         THEN (CASE WHEN addr.street = \'\' THEN \'99999\' ELSE \'99998\' END)
@@ -147,6 +153,15 @@ class LMSNetNodeManager extends LMSManager implements LMSNetNodeManagerInterface
                     addr.city_id as location_city, addr.street_id as location_street,
                     addr.house as location_house, addr.flat as location_flat') . '
                 FROM netnodes n
+                ' . ($short ? ''
+                : ' LEFT JOIN (
+                    SELECT
+                        nn.id AS netnodeid,
+                        COUNT(*) AS netdevcount
+                    FROM netnodes nn
+                    LEFT JOIN netdevices nd ON nd.netnodeid = nn.id
+                    GROUP BY nn.id
+                ) netdevcount ON netdevcount.netnodeid = n.id') . '
                 LEFT JOIN divisions d ON d.id = n.divisionid
                 LEFT JOIN vaddresses addr        ON addr.id = n.address_id
                 LEFT JOIN invprojects p         ON (n.invprojectid = p.id)
@@ -402,7 +417,7 @@ class LMSNetNodeManager extends LMSManager implements LMSNetNodeManagerInterface
 
     public function GetNetNodes()
     {
-        return $this->db->GetAll('SELECT * FROM netnodes ORDER BY name');
+        return $this->db->GetAllByKey('SELECT * FROM netnodes ORDER BY name', 'id');
     }
 
     /**

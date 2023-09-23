@@ -7,7 +7,7 @@
     <thead>
         <tr>
             <td colspan="2" class="text-center bold">
-                <i class="lms-ui-icon-node"></i> {trans("Nodes:")}
+                <i class="lms-ui-icon-node"></i> {trans("Nodes")}
             </td>
         </tr>
     </thead>
@@ -46,10 +46,18 @@
         </tr>
         <tr>
             <td class="text-right bold">
-                <a href="?m=nodelist&amp;s=5">{trans("TERRIT not specified")}:</a>
+                <a href="?m=nodelist&s=5">{trans("<!welcome>Without explicit TERYT")}:</a>
             </td>
             <td>
-                {$nodestats.withoutterryt}
+                {$nodestats.withoutexplicitteryt}
+            </td>
+        </tr>
+        <tr>
+            <td class="text-right bold">
+                <a href="?m=nodelist&s=11">{trans("<!welcome>Without TERYT")}:</a>
+            </td>
+            <td>
+                {$nodestats.withoutteryt}
             </td>
         </tr>
         <tr>

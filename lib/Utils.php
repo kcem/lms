@@ -35,6 +35,7 @@ class Utils
     const GUS_REGON_API_RESULT_BAD_KEY = 1;
     const GUS_REGON_API_RESULT_NO_DATA = 2;
     const GUS_REGON_API_RESULT_AMBIGUOUS = 3;
+    const GUS_REGON_API_RESULT_UNKNOWN_ERROR = 4;
 
     const GUS_REGON_API_SEARCH_TYPE_TEN = 1;
     const GUS_REGON_API_SEARCH_TYPE_REGON = 2;
@@ -43,8 +44,11 @@ class Utils
     public static function filterIntegers(array $params)
     {
         return array_filter($params, function ($value) {
+            if (!isset($value)) {
+                return false;
+            }
             $string = strval($value);
-            if ($string[0] == '-') {
+            if (strlen($string) && $string[0] == '-') {
                 $string = ltrim($string, '-');
             }
             return ctype_digit($string);
@@ -226,7 +230,19 @@ class Utils
                 $line = trim($line);
             }
             unset($line);
-            return implode("\n", $lines);
+            return preg_replace_callback(
+                '#\[([^]]+)\]\(([^)]*)\)#',
+                function ($matches) {
+                    if (preg_match('#https?://#', $matches[2])) {
+                        return $matches[0];
+                    } elseif (preg_match('#\[([^]]+)\]\(([^/][^\)]*)\)#', $matches[0])) {
+                        return '[' . $matches[1] . '](https://wiki.lms.plus/' . $matches[2] . ')';
+                    } elseif (preg_match('#\[([^]]+)\]\((/[^\)]*)\)#', $matches[0])) {
+                        return '[' . $matches[1] . '](https://github.com' . $matches[2] . ')';
+                    }
+                },
+                implode("\n", $lines)
+            );
         }
 
         $result = array();
@@ -235,15 +251,32 @@ class Utils
             return $result;
         }
 
-        $content = file($markdown_documentation_file);
+        $content = file_get_contents($markdown_documentation_file);
         if (empty($content)) {
             return $result;
         }
 
+        $content = explode(
+            "\n",
+            preg_replace_callback(
+                '#\[([^]]+)\]\(([^)]*)\)#',
+                function ($matches) {
+                    if (preg_match('#https?://#', $matches[2])) {
+                        return $matches[0];
+                    } elseif (preg_match('#\[([^]]+)\]\(([^/][^\)]*)\)#', $matches[0])) {
+                        return '[' . $matches[1] . '](https://wiki.lms.plus/' . $matches[2] . ')';
+                    } elseif (preg_match('#\[([^]]+)\]\((/[^\)]*)\)#', $matches[0])) {
+                        return '[' . $matches[1] . '](https://github.com' . $matches[2] . ')';
+                    }
+                },
+                $content
+            )
+        );
+
         $variable = null;
         $buffer = '';
         foreach ($content as $line) {
-            if (preg_match('/^##\s+(?<variable>.+)\r?\n/', $line, $m)) {
+            if (preg_match('/^##\s+(?<variable>.+)\r?/', $line, $m)) {
                 if ($variable && $buffer) {
                     list ($section, $var) = explode('.', $variable);
                     if (!isset($result[$section])) {
@@ -264,7 +297,7 @@ class Utils
                 $variable = null;
                 $buffer = '';
             } elseif ($variable) {
-                $buffer .= $line;
+                $buffer .= ($buffer != '' ? "\n" : '') . $line;
             }
         }
         if ($variable && $buffer) {
@@ -297,8 +330,18 @@ class Utils
         if (!empty($value)) {
             $values = array_flip(preg_split('/[\s\.,;]+/', $value, -1, PREG_SPLIT_NO_EMPTY));
             foreach ($CCONSENTS as $consent_id => $consent) {
-                if (isset($values[$consent['name']])) {
-                    $result[$consent_id] = $consent_id;
+                if (is_array($consent)) {
+                    if ($consent['type'] == 'selection') {
+                        foreach ($consent['values'] as $sub_consent_id => $subconsent) {
+                            if (isset($subconsent['name']) && isset($values[$subconsent['name']])) {
+                                $result[$consent_id] = $sub_consent_id;
+                            }
+                        }
+                    } else {
+                        if (isset($values[$consent['name']])) {
+                            $result[$consent_id] = $consent_id;
+                        }
+                    }
                 }
             }
         }
@@ -624,7 +667,7 @@ class Utils
                                     $local['lokpraw_adSiedzKodPocztowy']
                                 ),
                                 'location_postoffice' => $local['lokpraw_adSiedzMiejscowoscPoczty_Nazwa']
-                                    == $local->dane['praw_adSiedzMiejscowosc_Nazwa'] ? ''
+                                    == $report['praw_adSiedzMiejscowosc_Nazwa'] ? ''
                                         : $local['lokpraw_adSiedzMiejscowoscPoczty_Nazwa'],
                                 'location_state' => empty($location) ? 0 : $location['location_state'],
                                 'location_city' => empty($location) ? 0 : $location['location_city'],
@@ -660,8 +703,8 @@ class Utils
                     $details = array(
                         'lastname' => $report['fiz_nazwa'],
                         'name' => '',
-                        'rbename' => $report['fizC_RodzajRejestru_Nazwa'],
-                        'rbe' => $report['fizC_numerwRejestrzeEwidencji'],
+                        'rbename' => isset($report['fizC_RodzajRejestru_Nazwa']) ? $report['fizC_RodzajRejestru_Nazwa'] : '',
+                        'rbe' => isset($report['fizC_numerWRejestrzeEwidencji']) ? $report['fizC_numerWRejestrzeEwidencji'] : '',
                         'regon' => array_key_exists('fiz_regon9', $report)
                             ? $report['fiz_regon9']
                             : $report['fiz_regon14'],
@@ -697,11 +740,11 @@ class Utils
                             $report['fiz_adSiedzKodPocztowy']
                         ),
                         'location_postoffice' => $report['fiz_adSiedzMiejscowoscPoczty_Nazwa']
-                        == $report->dane['adSiedzMiejscowosc_Nazwa'] ? ''
-                            : $report['fiz_adSiedzMiejscowoscPoczty_Nazwa'],
+                            == $report['fiz_adSiedzMiejscowosc_Nazwa'] ? ''
+                                : $report['fiz_adSiedzMiejscowoscPoczty_Nazwa'],
                         'location_state' => empty($location) ? 0 : $location['location_state'],
                         'location_city' => empty($location) ? 0 : $location['location_city'],
-                        'location_street' => empty($location) ? 0 : $location['location_street'],
+                        'location_street' => empty($location) || empty($location['location_street']) ? 0 : $location['location_street'],
                     );
 
                     $details['addresses'] = $addresses;
@@ -747,11 +790,11 @@ class Utils
                                         $local['lokfiz_adSiedzKodPocztowy']
                                     ),
                                     'location_postoffice' => $local['lokfiz_adSiedzMiejscowoscPoczty_Nazwa']
-                                        == $local->dane['fiz_adSiedzMiejscowosc_Nazwa'] ? ''
+                                        == $local['lokfiz_adSiedzMiejscowosc_Nazwa'] ? ''
                                             : $local['lokfiz_adSiedzMiejscowoscPoczty_Nazwa'],
                                     'location_state' => empty($location) ? 0 : $location['location_state'],
                                     'location_city' => empty($location) ? 0 : $location['location_city'],
-                                    'location_street' => empty($location) ? 0 : $location['location_street'],
+                                    'location_street' => empty($location) || empty($location['location_street']) ? 0 : $location['location_street'],
                                 );
 
                                 $details['addresses'] = $addresses;
@@ -787,5 +830,91 @@ class Utils
 
         $url = str_replace('%phone', $phone, $call_phone_url);
         return '<a href="' . $url . '"><i class="lms-ui-icon-phone"></i></a>';
+    }
+
+    public static function strftime($format, $date)
+    {
+        return str_replace(
+            array(
+                '%Y',
+                '%m',
+                '%d',
+                '%e',
+                '%u',
+                '%a',
+                '%A',
+                '%w',
+                '%b',
+                '%B',
+                '%y',
+                '%H',
+                '%I',
+                '%M',
+                '%S',
+                '%T',
+                '%F',
+                '%D',
+                '%s',
+                '%Z',
+                '%z',
+                '%k',
+                '%k',
+                '%R',
+                '%V',
+                '%j',
+            ),
+            explode(
+                '|',
+                date('Y|m|d|j|N|D|l|w|', $date)
+                . trans('<!month-name-short>' . date('M', $date))
+                . '|'
+                . trans('<!month-name-full>' . date('F', $date))
+                . date('|y|H|h|i|s|H:i:s|Y-m-d|m/d/y|U|T|O|G|G|H:i|W|', $date)
+                . sprintf('%03d', date('z', $date) + 1)
+            ),
+            $format
+        );
+    }
+
+    public static function isPrivateAddress($ip)
+    {
+        return preg_match('/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|100\.64\.|100\.68\.)/', $ip) > 0;
+    }
+
+    public static function normalizeMac($mac)
+    {
+        return strtoupper(
+            preg_replace(
+                '/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i',
+                '$1:$2:$3:$4:$5:$6',
+                preg_replace(
+                    '/[^0-9a-f]/i',
+                    '',
+                    $mac
+                )
+            )
+        );
+    }
+
+    public static function smartFormatMoney($value, $currency = null)
+    {
+        if (is_string($value)) {
+            $value = floatval($value);
+        }
+        if (empty($currency)) {
+            $currency = Localisation::getCurrentCurrency();
+        }
+        return sprintf('%s %s', Localisation::smartFormatNumber($value), $currency);
+    }
+
+    public static function formatMoney($value, $currency = null)
+    {
+        if (is_string($value)) {
+            $value = floatval($value);
+        }
+        if (empty($currency)) {
+            $currency = Localisation::getCurrentCurrency();
+        }
+        return sprintf('%s %s', Localisation::formatNumber($value), $currency);
     }
 }

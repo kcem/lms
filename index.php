@@ -28,9 +28,13 @@
 // *EXACTLY* WHAT ARE YOU DOING!!!
 // *******************************************************************
 
+if (!isset($_SERVER['HTTP_HOST'])) {
+    $_SERVER['HTTP_HOST'] = '';
+}
+
 define('START_TIME', microtime(true));
 define('LMS-UI', true);
-//define('K_TCPDF_EXTERNAL_CONFIG', true);
+define('K_TCPDF_EXTERNAL_CONFIG', true);
 define('K_TCPDF_CALLS_IN_HTML', true);
 ini_set('error_reporting', E_ALL & ~E_NOTICE);
 
@@ -112,8 +116,8 @@ if (!$api) {
     $db_upgrade_errors = $DB->getUpgradeErrors();
     if (!empty($db_upgrade_errors)) {
         die(
-            "Launch 'devel/upgradedb.php' script from your installation directory (recommended)'
-                . ' or add 'database.auto_update' configuration variable with value 'true' to lms.ini file (not recommended)<br>"
+            "Launch 'devel/upgradedb.php' script from your installation directory (recommended)"
+                . " or add 'database.auto_update' configuration variable with value 'true' to lms.ini file (not recommended)<br>"
         );
     }
 
@@ -139,6 +143,8 @@ if (!$api) {
     $SMARTY->setMergeCompiledIncludes(true);
 
     $SMARTY->setDefaultResourceType('extendsall');
+
+    $SMARTY->muteUndefinedOrNullWarnings();
 
     // uncomment this line if you're not gonna change template files no more
     //$SMARTY->compile_check = false;
@@ -268,7 +274,7 @@ if ($AUTH->islogged) {
         $qs_properties = array();
     } else {
         foreach ($qs_properties as $mode => $properties) {
-            $qs_properties[$mode] = array_flip(explode(',', $properties));
+            $qs_properties[$mode] = strlen($properties) ? array_flip(explode(',', $properties)) : array();
         }
     }
 
@@ -366,8 +372,14 @@ if ($AUTH->islogged) {
 
     if ($module != 'logout') {
         if ($AUTH->requiredPasswordChange()) {
+            if ($api) {
+                die;
+            }
             $module = 'chpasswd';
         } elseif ($AUTH->requiredTwoFactorAuthChange()) {
+            if ($api) {
+                die;
+            }
             $module = 'twofactorauthedit';
         }
     }
@@ -407,7 +419,7 @@ if ($AUTH->islogged) {
             $SESSION->save('module', $module);
 
             if (!$api) {
-                $SMARTY->assign('url', 'http' . ($_SERVER['HTTPS'] == 'on' ? 's' : '') . '://' . $_SERVER['HTTP_HOST']
+                $SMARTY->assign('url', 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on' ? 's' : '') . '://' . $_SERVER['HTTP_HOST']
                     . substr($_SERVER['REQUEST_URI'], 0, strrpos($_SERVER['REQUEST_URI'], '/') + 1));
 
                 // get all persistent filters
@@ -499,6 +511,11 @@ if ($AUTH->islogged) {
 
             $LMS->InitUI();
             $LMS->executeHook($module.'_on_load');
+
+            $serviceproviders = $LMS->getServiceProviders();
+            if (!$api) {
+                $SMARTY->assign('serviceproviders', $serviceproviders);
+            }
 
             try {
                 include($module_dir . DIRECTORY_SEPARATOR . $module . '.php');

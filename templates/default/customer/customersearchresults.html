@@ -80,7 +80,7 @@
 			{/if}
 			<a name="{$customerlist[customerlist].id}" class="lms-ui-hint-rollover"
 				data-url="?m=customerinfoshort&id={$customerlist[customerlist].id}">
-					<strong>{$customerlist[customerlist].customername}</strong>
+					<strong>{$customerlist[customerlist].customername|escape}</strong>
 			</a>
 			{if !empty($customerlist[customerlist].karma)}
 				<i class="lms-ui-icon-star{if $customerlist[customerlist].karma > 0} green{else} red{/if}" title="{trans('Karma')}"></i>
@@ -181,6 +181,15 @@
 						<option value="2">{trans("<!customersearch>Disable warning")}</option>
 						<option value="3">{trans("Set notice content")}</option>
 					</optgroup>
+					<optgroup label="{trans("Customer statuses")}">
+						{foreach $_CSTATUSES as $statusid => $status}
+							<option value="{($statusid + 100)}">{$status.singularlabel}</option>
+						{/foreach}
+					</optgroup>
+					<optgroup label="{trans("<!customersearch>Customer deletion")}">
+						<option value="14">{trans("<!customersearch>Deletion")}</option>
+						<option value="15">{trans("<!customersearch>Restoration")}</option>
+					</optgroup>
 					{if is_array($listdata.customergroup)}
 						<optgroup label="{trans("Customer groups")}">
 							{$groups = array_flip($listdata.customergroup)}
@@ -227,7 +236,19 @@
 				<select class="lms-ui-multiselect-deferred" name="consents[]" data-separator="<hr>"
 						id="customerconsents" style="display: none;" multiple>
 					{foreach $_CCONSENTS as $type => $consent}
-						<option value="{$type}">{$consent.label}</option>
+						{if !is_array($consent)}
+							{continue}
+						{/if}
+						{if $consent.type == 'selection'}
+							{foreach $consent.values as $subtype => $subconsent}
+								{if !isset($subconsent.name)}
+									{continue}
+								{/if}
+								<option value="{$subtype}">{t a=$consent.label b=$subconsent.label}$a ($b){/t}</option>
+							{/foreach}
+						{else}
+							<option value="{$type}">{$consent.label}</option>
+						{/if}
 					{/foreach}
 				</select>
 				{foreach $_CUSTOMERCONTACTTYPES as $contacttypeidx => $contacttype}
@@ -409,6 +430,24 @@
 			$('#customersearchresults').attr('action', action).submit();
 		}
 
+		function changeCustomerStatus(status) {
+			var action = '?m=customeredit&search=1&status=' + status + '&oper=changestatus';
+
+			$('#customersearchresults').attr('action', action).submit();
+		}
+
+		function deleteCustomer() {
+			var action = '?m=customerdel';
+
+			$('#customersearchresults').attr('action', action).submit();
+		}
+
+		function restoreCustomer() {
+			var action = '?m=customeredit&search=1&oper=restore';
+
+			$('#customersearchresults').attr('action', action).submit();
+		}
+
 		$('#customer-action').change(function() {
 			var action = parseInt($(this).val());
 
@@ -488,12 +527,22 @@
 				case 13:
 					changeCustomerType({$smarty.const.CTYPES_COMPANY});
 					break;
+				case 14:
+					deleteCustomer();
+					break;
+				case 15:
+					restoreCustomer();
+					break;
 				default:
-					var option = $('#customer-action option:selected');
-					var resource = option.attr('data-resource');
-					var operation = option.attr('data-operation');
-					if (resource && operation) {
-						changeContactFlags(resource, parseInt(operation));
+					if (action >= {($smarty.const.CSTATUS_CONNECTED + 100)} && action <= {($smarty.const.CSTATUS_LAST + 100)}) {
+						changeCustomerStatus(action - 100);
+					} else {
+						var option = $('#customer-action option:selected');
+						var resource = option.attr('data-resource');
+						var operation = option.attr('data-operation');
+						if (resource && operation) {
+							changeContactFlags(resource, parseInt(operation));
+						}
 					}
 					break;
 			}

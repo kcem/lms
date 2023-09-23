@@ -103,6 +103,7 @@ switch ($action) {
             foreach ($invoice['content'] as $item) {
                 $contents[] = array(
                     'tariffid' => $item['tariffid'],
+                    'tariff' => !empty($item['tariffid']) ? $LMS->GetTariff($item['tariffid']) : array(),
                     'name' => $item['description'],
                     'prodid' => $item['prodid'],
                     'count' => str_replace(',', '.', $item['count']),
@@ -155,10 +156,14 @@ switch ($action) {
         if (isset($_GET['id'])) {
             $invoice['deadline'] = $invoice['cdate'] + $invoice['paytime'] * 86400;
         } else {
-            if (isset($customer) && $customer['paytime'] != -1) {
-                $paytime = $customer['paytime'];
-            } elseif (($paytime = $DB->GetOne('SELECT inv_paytime FROM divisions 
-				WHERE id = ?', array($customer['divisionid']))) === null) {
+            if (isset($customer)) {
+                if ($customer['paytime'] != -1) {
+                    $paytime = $customer['paytime'];
+                } elseif (($paytime = $DB->GetOne('SELECT inv_paytime FROM divisions
+                     WHERE id = ?', array($customer['divisionid']))) === null) {
+                    $paytime = ConfigHelper::getConfig('invoices.paytime');
+                }
+            } else {
                 $paytime = ConfigHelper::getConfig('invoices.paytime');
             }
             $invoice['deadline'] = $currtime + $paytime * 86400;
@@ -244,10 +249,9 @@ switch ($action) {
                 trans('Tax category selection is required!');
         }
 
-        foreach (array('pdiscount', 'vdiscount', 'valuenetto', 'valuebrutto') as $key) {
-            $itemdata[$key] = f_round($itemdata[$key]);
+        foreach (array('discount', 'pdiscount', 'vdiscount', 'valuenetto', 'valuebrutto', 'count') as $key) {
+            $itemdata[$key] = f_round($itemdata[$key], 3);
         }
-        $itemdata['count'] = f_round($itemdata['count'], 3);
 
         if ($itemdata['count'] > 0 && $itemdata['name'] != '') {
             $taxvalue = isset($itemdata['taxid']) ? $taxeslist[$itemdata['taxid']]['value'] : 0;
@@ -255,25 +259,26 @@ switch ($action) {
 
             if ($invoice['netflag']) {
                 $itemdata['valuenetto'] = f_round(($itemdata['valuenetto'] - $itemdata['valuenetto'] * f_round($itemdata['pdiscount']) / 100)
-                    - $itemdata['vdiscount']);
+                    - $itemdata['vdiscount'], 3);
                 $itemdata['s_valuenetto'] = f_round($itemdata['valuenetto'] * $itemdata['count']);
                 $itemdata['tax_from_s_valuenetto'] = f_round($itemdata['s_valuenetto'] * ($taxvalue / 100));
                 $itemdata['s_valuebrutto'] = f_round($itemdata['s_valuenetto'] + $itemdata['tax_from_s_valuenetto']);
-                $itemdata['valuebrutto'] = f_round($itemdata['valuenetto'] * ($taxvalue / 100 + 1));
+                $itemdata['valuebrutto'] = f_round($itemdata['valuenetto'] * ($taxvalue / 100 + 1), 3);
             } else {
                 $itemdata['valuebrutto'] = f_round(($itemdata['valuebrutto'] - $itemdata['valuebrutto'] * f_round($itemdata['pdiscount']) / 100)
-                    - $itemdata['vdiscount']);
+                    - $itemdata['vdiscount'], 3);
                 $itemdata['s_valuebrutto'] = f_round($itemdata['valuebrutto'] * $itemdata['count']);
                 $itemdata['tax_from_s_valuebrutto'] = f_round(($itemdata['s_valuebrutto'] * $taxvalue)
                     / (100 + $taxvalue));
                 $itemdata['s_valuenetto'] = f_round($itemdata['s_valuebrutto'] - $itemdata['tax_from_s_valuebrutto']);
-                $itemdata['valuenetto'] = f_round($itemdata['valuebrutto'] / ($taxvalue / 100 + 1));
+                $itemdata['valuenetto'] = f_round($itemdata['valuebrutto'] / ($taxvalue / 100 + 1), 3);
             }
 
-            $itemdata['discount'] = f_round($itemdata['discount']);
-            $itemdata['pdiscount'] = f_round($itemdata['pdiscount']);
-            $itemdata['vdiscount'] = f_round($itemdata['vdiscount']);
             $itemdata['tax'] = isset($itemdata['taxid']) ? $taxeslist[$itemdata['taxid']]['label'] : '';
+        }
+
+        if ($itemdata['tariffid'] > 0) {
+            $itemdata['tariff'] = $LMS->GetTariff($itemdata['tariffid']);
         }
 
         $hook_data = array(
@@ -343,7 +348,7 @@ switch ($action) {
         break;
 
     case 'setcustomer':
-        $customer_paytime = $customer['paytime'];
+        $customer_paytime = isset($customer) ? $customer['paytime'] : -1;
 
         unset($invoice);
         unset($customer);
@@ -425,6 +430,12 @@ switch ($action) {
             $invoice['sdate'] = $invoice['cdate'];
         }
 
+        $cid = isset($_GET['customerid']) && $_GET['customerid'] != '' ? intval($_GET['customerid']) : intval($_POST['customerid']);
+
+        if ($LMS->CustomerExists($cid)) {
+            $customer = $LMS->GetCustomer($cid, true);
+        }
+
         if ($invoice['deadline']) {
             list ($dyear, $dmonth, $dday) = explode('/', $invoice['deadline']);
             if (checkdate($dmonth, $dday, $dyear)) {
@@ -438,7 +449,7 @@ switch ($action) {
         } else {
             if ($customer_paytime != -1) {
                 $paytime = $customer_paytime;
-            } elseif (($paytime = $DB->GetOne('SELECT inv_paytime FROM divisions
+            } elseif (!empty($customer) && ($paytime = $DB->GetOne('SELECT inv_paytime FROM divisions
 				WHERE id = ?', array($customer['divisionid']))) === null) {
                 $paytime = ConfigHelper::getConfig('invoices.paytime');
             }
@@ -448,8 +459,6 @@ switch ($action) {
         if ($invoice['deadline'] < $invoice['cdate']) {
             $error['deadline'] = trans('Deadline date should be later than consent date!');
         }
-
-        $cid = isset($_GET['customerid']) && $_GET['customerid'] != '' ? intval($_GET['customerid']) : intval($_POST['customerid']);
 
         if ($invoice['number']) {
             if (!preg_match('/^[0-9]+$/', $invoice['number'])) {
@@ -467,10 +476,6 @@ switch ($action) {
 
         if (!isset($CURRENCIES[$invoice['currency']])) {
             $error['currency'] = trans('Invalid currency selection!');
-        }
-
-        if ($LMS->CustomerExists($cid)) {
-            $customer = $LMS->GetCustomer($cid, true);
         }
 
         if (empty($error)) {
@@ -611,7 +616,6 @@ switch ($action) {
                 'planid' => $invoice['numberplanid'],
                 'cdate' => $invoice['cdate'],
                 'customerid' => $customer['id'],
-                'comment' => $invoice['comment'],
             ));
         } else {
             if (!preg_match('/^[0-9]+$/', $invoice['number'])) {
@@ -622,7 +626,6 @@ switch ($action) {
                     'planid' => $invoice['numberplanid'],
                     'cdate' => $invoice['cdate'],
                     'customerid' => $customer['id'],
-                    'comment' => $invoice['comment'],
                 ))) {
                 $error['number'] = trans('Invoice number $a already exists!', $invoice['number']);
             }
@@ -693,6 +696,8 @@ switch ($action) {
         $SESSION->remove('invoice', true);
         $SESSION->remove('invoicenewerror', true);
 
+        $contents = $customer = $error = $invoice = null;
+
         if (isset($_GET['print'])) {
             $which = isset($_GET['which']) ? $_GET['which'] : 0;
 
@@ -713,14 +718,15 @@ $SESSION->save('invoicecontents', isset($contents) ? $contents : null, true);
 $SESSION->save('invoicecustomer', isset($customer) ? $customer : null, true);
 $SESSION->save('invoicenewerror', isset($error) ? $error : null, true);
 
-
-if ($action && !$error) {
+if ($action && (!isset($error) || !$error)) {
     // redirect needed because we don't want to destroy contents of invoice in order of page refresh
     $SESSION->redirect('?m=invoicenew');
 }
 
 $covenantlist = array();
-$list = GetCustomerCovenants($customer['id'], $invoice['currency']);
+if (isset($customer)) {
+    $list = GetCustomerCovenants($customer['id'], $invoice['currency']);
+}
 
 if (isset($list)) {
     if ($contents) {
@@ -755,7 +761,7 @@ $SMARTY->assign('error', $error);
 $SMARTY->assign('tariffs', $LMS->GetTariffs());
 
 $args = array(
-    'doctype' => $invoice['proforma'] ? DOC_INVOICE_PRO : DOC_INVOICE,
+    'doctype' => !empty($invoice['proforma']) ? DOC_INVOICE_PRO : DOC_INVOICE,
     'cdate' => date('Y/m', $invoice['cdate']),
 );
 if (isset($customer)) {
@@ -775,7 +781,7 @@ $SMARTY->assign('taxeslist', $taxeslist);
 
 if (isset($invoice['proformaid']) && !empty($invoice['proformaid'])) {
     $layout['pagetitle'] = trans('Conversion Pro Forma Invoice $a To Invoice', $invoice['proformanumber']);
-} elseif ($invoice['proforma']) {
+} elseif (!empty($invoice['proforma'])) {
     $layout['pagetitle'] = trans('New Pro Forma Invoice');
 } else {
     $layout['pagetitle'] = trans('New Invoice');

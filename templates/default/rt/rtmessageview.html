@@ -40,7 +40,7 @@
 			{trans("Date:")}
 		</TD>
 		<TD class="nobr">
-			{$message.createtime|date_format:"%Y/%m/%d %H:%M.%S"}
+			{$message.createtime|date_format:"Y-m-d H:i:s"}
 		</TD>
 	</TR>
 	<TR>
@@ -137,7 +137,7 @@
 		</TD>
 		<TD{if $message.contenttype == 'text/html'} class="message-html-body"{/if}>
 			{if $message.contenttype == 'text/plain'}
-				<textarea rows="5" cols="100" readonly>{$message.body|trim|escape|message_quote}</textarea>
+				<textarea rows="5" cols="100" readonly>{trim($message.body)|escape|message_quote}</textarea>
 			{else}
 				{$message.body|message_quote}
 			{/if}
@@ -178,10 +178,10 @@
 
 		</TD>
 		<TD class="nobr bold">
-			{trans("Remove date:")}
+			{trans("Remove date")}
 		</TD>
 		<TD>
-			{$message.deltime|date_format:"%Y/%m/%d %H:%M.%S"}
+			{$message.deltime|date_format:"Y-m-d H:i:s"}
 		</TD>
 	</TR>
 	{/if}

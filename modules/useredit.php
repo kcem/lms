@@ -5,7 +5,7 @@ use PragmaRX\Google2FA\Google2FA;
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2023 LMS Developers
+ *  (C) Copyright 2001-2022 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -74,7 +74,7 @@ $user_divisions = array_keys($LMS->GetDivisions(array('userid' => $id)));
 
 include(MODULES_DIR . DIRECTORY_SEPARATOR . 'usercopypermissions.inc.php');
 
-$userinfo = isset($_POST['userinfo']) ? $_POST['userinfo'] : false;
+$userinfo = isset($_POST['userinfo']) ? $_POST['userinfo'] : array();
 
 if ($userinfo) {
     $acl = $_POST['acl'];
@@ -145,6 +145,20 @@ if ($userinfo) {
             $google2fa = new Google2FA();
             if ($google2fa->removeInvalidChars($userinfo['twofactorauthsecretkey']) != $userinfo['twofactorauthsecretkey']) {
                 $error['twofactorauthsecretkey'] = trans('Secret key contains invalid characters!');
+            }
+        }
+    }
+
+    foreach (array('hosts', 'trustedhosts') as $field) {
+        if ($userinfo[$field]) {
+            $hosts = preg_split("/([\s]+|[\s]*,[\s]*)/", $userinfo[$field], -1, PREG_SPLIT_NO_EMPTY);
+            if (!empty($hosts)) {
+                foreach ($hosts as $host) {
+                    if (!check_ip($host) && !check_cidr($host)) {
+                        $error[$field] = trans('Invalid address list format!');
+                        break;
+                    }
+                }
             }
         }
     }

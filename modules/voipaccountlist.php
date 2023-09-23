@@ -24,7 +24,7 @@
  *  $Id$
  */
 
-$layout['pagetitle'] = trans('Voip Accounts List');
+$layout['pagetitle'] = trans('VoIP Accounts List');
 
 $SESSION->add_history_entry();
 
@@ -43,6 +43,17 @@ $listdata['direction'] = $voipaccountlist['direction'];
 unset($voipaccountlist['total']);
 unset($voipaccountlist['order']);
 unset($voipaccountlist['direction']);
+
+$hook_data = $plugin_manager->executeHook(
+    'voipaccountlist_init',
+    array(
+        'voipaccountlist' => $voipaccountlist,
+        'listdata' => $listdata,
+    )
+);
+
+$voipaccountlist = $hook_data['voipaccountlist'];
+$listdata = $hook_data['listdata'];
 
 if ($SESSION->is_set('valp') && !isset($_GET['page'])) {
     $SESSION->restore('valp', $_GET['page']);

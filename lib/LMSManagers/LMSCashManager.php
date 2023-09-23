@@ -63,6 +63,8 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
         $error = array();
         $syslog_records = array();
 
+        $sourcefileid = null;
+
         foreach ($file as $line) {
             $id = null;
             $count = 0;
@@ -111,17 +113,95 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                 continue;
             }
 
-            $name = isset($matches[$pattern['pname']]) ? trim($matches[$pattern['pname']]) : '';
-            $customername = preg_replace('/[\s]{2,}/', ' ', $name);
-            $lastname = isset($matches[$pattern['plastname']]) ? trim($matches[$pattern['plastname']]) : '';
-            $comment = isset($matches[$pattern['pcomment']]) ? trim($matches[$pattern['pcomment']]) : '';
-            $time = isset($matches[$pattern['pdate']]) ? trim($matches[$pattern['pdate']]) : '';
-            $value = str_replace(',', '.', isset($matches[$pattern['pvalue']]) ? preg_replace('/[\s]/', '', $matches[$pattern['pvalue']]) : '');
-            $srcaccount = isset($matches[$pattern['srcaccount']]) ? preg_replace('/[\s]/', '', $matches[$pattern['srcaccount']]) : '';
-            $dstaccount = isset($matches[$pattern['dstaccount']]) ? preg_replace('/[\s]/', '', $matches[$pattern['dstaccount']]) : '';
+            if (isset($matches['name'])) {
+                $name = trim($matches['name']);
+            } elseif (isset($pattern['pname'], $matches[$pattern['pname']])) {
+                $name = trim($matches[$pattern['pname']]);
+            } elseif (isset($pattern['name'], $matches[$pattern['name']])) {
+                $name = trim($matches[$pattern['name']]);
+            } else {
+                $name = '';
+            }
 
-            if (!$pattern['pid']) {
-                if (!empty($pattern['pid_regexp'])) {
+            if (isset($matches['lastname'])) {
+                $lastname = trim($matches['lastname']);
+            } elseif (isset($pattern['plastname'], $matches[$pattern['plastname']])) {
+                $lastname = trim($matches[$pattern['plastname']]);
+            } elseif (isset($pattern['lastname'], $matches[$pattern['lastname']])) {
+                $lastname = trim($matches[$pattern['lastname']]);
+            } else {
+                $lastname = '';
+            }
+
+            $customername = preg_replace('/[\s]{2,}/', ' ', (empty($lastname) ? '' : $lastname . ' ') . $name);
+
+            if (isset($matches['comment'])) {
+                $comment = trim($matches['comment']);
+            } elseif (isset($pattern['pcomment'], $matches[$pattern['pcomment']])) {
+                $comment = trim($matches[$pattern['pcomment']]);
+            } elseif (isset($pattern['comment'], $matches[$pattern['comment']])) {
+                $comment = trim($matches[$pattern['comment']]);
+            } else {
+                $comment = '';
+            }
+
+            if (isset($matches['date'])) {
+                $time = trim($matches['date']);
+            } elseif (isset($pattern['pdate'], $matches[$pattern['pdate']])) {
+                $time = trim($matches[$pattern['pdate']]);
+            } elseif (isset($pattern['date'], $matches[$pattern['date']])) {
+                $time = trim($matches[$pattern['date']]);
+            } else {
+                $time = '';
+            }
+
+            if (isset($matches['operdate'])) {
+                $operdate = trim($matches['operdate']);
+            } elseif (isset($pattern['poperdate'], $matches[$pattern['poperdate']])) {
+                $operdate = trim($matches[$pattern['poperdate']]);
+            } else {
+                $operdate = '';
+            }
+            if (!strlen($operdate)) {
+                $operdate = null;
+            }
+
+            if (isset($matches['value'])) {
+                $value = str_replace(',', '.', preg_replace('/[\s]/', '', $matches['value']));
+            } elseif (isset($pattern['pvalue'], $matches[$pattern['pvalue']])) {
+                $value = str_replace(',', '.', preg_replace('/[\s]/', '', $matches[$pattern['pvalue']]));
+            } elseif (isset($pattern['value'], $matches[$pattern['value']])) {
+                $value = str_replace(',', '.', preg_replace('/[\s]/', '', $matches[$pattern['value']]));
+            } else {
+                $value = '';
+            }
+
+            if (isset($matches['srcaccount'])) {
+                $srcaccount = preg_replace('/[\s]/', '', $matches['srcaccount']);
+            } elseif (isset($pattern['srcaccount'], $matches[$pattern['srcaccount']])) {
+                $srcaccount = preg_replace('/[\s]/', '', $matches[$pattern['srcaccount']]);
+            } else {
+                $srcaccount = '';
+            }
+
+            if (isset($matches['dstaccount'])) {
+                $dstaccount = preg_replace('/[\s]/', '', $matches['dstaccount']);
+            } elseif (isset($pattern['dstaccount'], $matches[$pattern['dstaccount']])) {
+                $dstaccount = preg_replace('/[\s]/', '', $matches[$pattern['dstaccount']]);
+            } else {
+                $dstaccount = '';
+            }
+
+            if (isset($matches['option_string'])) {
+                $optional_string = trim($matches['optional_string']);
+            } elseif (isset($pattern['optional_string'], $matches[$pattern['optional_string']])) {
+                $optional_string = trim($matches[$pattern['optional_string']]);
+            } else {
+                $optional_string = '';
+            }
+
+            if (empty($matches['id']) && empty($pattern['pid'])) {
+                if (isset($pattern['pid_regexp']) && strlen($pattern['pid_regexp'])) {
                     $regexp = $pattern['pid_regexp'];
                 } else {
                     $regexp = '/.*ID[:\-\/]([0-9]{0,4}).*/i';
@@ -130,44 +210,119 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                 if (preg_match($regexp, $theline, $matches)) {
                     $id = $matches[1];
                 }
+            } elseif (isset($matches['id'])) {
+                $id = intval(preg_replace('/\s+/', '', $matches['id']));
+            } elseif (isset($pattern['pid'], $matches[$pattern['pid']])) {
+                $id = intval(preg_replace('/\s+/', '', $matches[$pattern['pid']]));
             } else {
-                $id = isset($matches[$pattern['pid']]) ? intval(preg_replace('/\s+/', '', $matches[$pattern['pid']])) : null;
+                $id = null;
+            }
+
+            if (isset($matches['extid'])) {
+                $extid = trim($matches['extid']);
+                if (!strlen($extid)) {
+                    $extid = null;
+                }
+            } elseif (isset($pattern['pextid'], $matches[$pattern['pextid']])) {
+                $extid = trim($matches[$pattern['pextid']]);
+                if (!strlen($extid)) {
+                    $extid = null;
+                }
+            } else {
+                $extid = null;
             }
 
             // seek invoice number
             if (!$id && !empty($pattern['invoice_regexp'])) {
                 if (preg_match($pattern['invoice_regexp'], $theline, $matches)) {
-                    $invid = $matches[$pattern['pinvoice_number']];
-                    $invyear = $matches[$pattern['pinvoice_year']];
-                    $invmonth = !empty($pattern['pinvoice_month']) && $pattern['pinvoice_month'] > 0 ? intval($matches[$pattern['pinvoice_month']]) : 1;
-
-                    if ($invid && $invyear) {
-                        $from = mktime(0, 0, 0, $invmonth, 1, $invyear);
-                        $to = mktime(0, 0, 0, !empty($pattern['pinvoice_month']) && $pattern['pinvoice_month'] > 0 ? $invmonth + 1 : 13, 1, $invyear);
+                    if (!isset($pattern['pinvoice_year'], $pattern['pinvoice_month'], $pattern['pinvoice_number'])
+                        && !isset($matches['invoice_year'], $matches['invoice_month'], $matches['invoice_number'])) {
                         $id = $this->db->GetOne(
-                            'SELECT customerid FROM documents
-								WHERE number=? AND cdate>? AND cdate<? AND type IN (?,?)',
-                            array($invid, $from, $to, DOC_INVOICE, DOC_CNOTE)
+                            'SELECT customerid
+                            FROM documents
+                            WHERE LOWER(fullnumber) = LOWER(?)
+                                AND type IN ?',
+                            array(
+                                $matches[1],
+                                array(DOC_INVOICE, DOC_CNOTE)
+                            )
                         );
+                    } else {
+                        if (isset($matches['invoice_number'])) {
+                            $invnumber = $matches['invoice_number'];
+                        } elseif (isset($pattern['pinvoice_number'], $matches[$pattern['pinvoice_number']])) {
+                            $invnumber = $matches[$pattern['pinvoice_number']];
+                        } else {
+                            $invnumber = null;
+                        }
+                        if (isset($matches['invoice_year'])) {
+                            $invyear = $matches['invoice_year'];
+                        } elseif (isset($pattern['pinvoice_year'], $matches[$pattern['pinvoice_year']])) {
+                            $invyear = $matches[$pattern['pinvoice_year']];
+                        } else {
+                            $invyear = null;
+                        }
+                        if (isset($matches['invoice_month']) && $matches['invoice_month'] > 0) {
+                            $invmonth = intval($matches['invoice_month']);
+                        } elseif (isset($pattern['pinvoice_month'], $matches[$pattern['pinvoice_month']])
+                            && $matches[$pattern['pinvoice_month']] > 0) {
+                            $invmonth = intval($matches[$pattern['pinvoice_month']]);
+                        } else {
+                            $invmonth = 1;
+                        }
+
+                        if ($invnumber && $invyear) {
+                            $from = mktime(0, 0, 0, $invmonth, 1, $invyear);
+
+                            if (isset($matches['invoice_month']) && $matches['invoice_month'] > 0) {
+                                $to_month = $invmonth + 1;
+                            } elseif (isset($pattern['pinvoice_month']) && $pattern['pinvoice_month'] > 0) {
+                                $to_month = $invmonth + 1;
+                            } else {
+                                $to_month = 13;
+                            }
+                            $to = mktime(0, 0, 0, $to_month, 1, $invyear);
+
+                            $id = $this->db->GetOne(
+                                'SELECT customerid
+                                FROM documents
+                                WHERE number = ?
+                                    AND cdate > ?
+                                    AND cdate < ?
+                                    AND type IN ?',
+                                array(
+                                    $invnumber,
+                                    $from,
+                                    $to,
+                                    array(DOC_INVOICE, DOC_CNOTE)
+                                )
+                            );
+                        }
                     }
                 }
             }
 
             // seek by explicitly given source or destination customer account numbers
             if (!$id) {
-                if (!empty($dstaccount)) {
+                if (strlen($dstaccount)) {
                     $id = $this->db->GetOne(
                         'SELECT customerid FROM customercontacts
-						WHERE contact = ? AND (type & ?) = ?',
-                        array($dstaccount, CONTACT_BANKACCOUNT | CONTACT_INVOICES | CONTACT_DISABLED,
-                        CONTACT_BANKACCOUNT | CONTACT_INVOICES)
+                        WHERE contact = ? AND (type & ?) = ?',
+                        array(
+                            $dstaccount,
+                            CONTACT_BANKACCOUNT | CONTACT_INVOICES | CONTACT_DISABLED,
+                            CONTACT_BANKACCOUNT | CONTACT_INVOICES,
+                        )
                     );
-                } elseif (!empty($srcaccount)) {
+                } elseif (strlen($srcaccount)) {
                     $id = $this->db->GetOne(
                         'SELECT customerid FROM customercontacts
-						WHERE contact = ? AND (type & ?) = ?',
-                        array($srcaccount, CONTACT_BANKACCOUNT | CONTACT_INVOICES | CONTACT_DISABLED,
-                        CONTACT_BANKACCOUNT)
+                        WHERE contact = ? AND (type & ?) = ?',
+                        array(
+                            $srcaccount,
+                            CONTACT_BANKACCOUNT | CONTACT_INVOICES | CONTACT_DISABLED,
+                            CONTACT_BANKACCOUNT,
+                        )
                     );
                     if (empty($id)) {
                         // find customer by source accounts stored in cash import record;
@@ -175,13 +330,19 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                         // then we matched customer by source account
                         if (!isset($unique_source_accounts)) {
                             $days = intval(ConfigHelper::getConfig($config_section . '.source_account_match_threshold_days'));
-                            $unique_source_accounts = $this->db->GetAll(
-                                'SELECT customerid, MIN(srcaccount) AS srcaccount
-                                FROM cashimport
-                                WHERE customerid IS NOT NULL AND srcaccount IS NOT NULL
-                                    ' . ($days ? ' AND date >= ?NOW? - ' . $days . ' * 86400' : '') . '
-                                GROUP BY customerid
-                                HAVING COUNT(DISTINCT srcaccount) = 1'
+                            $unique_source_accounts = $this->db->GetALl(
+                                'SELECT i.customerid, i.srcaccount
+                                FROM cashimport i
+                                JOIN (
+                                    SELECT i2.srcaccount
+                                    FROM cashimport i2
+                                    WHERE i2.customerid IS NOT NULL AND i2.srcaccount IS NOT NULL
+                                        ' . ($days ? ' AND i2.date >= ?NOW? - ' . $days . ' * 86400' : '') . '
+                                    GROUP BY i2.srcaccount
+                                    HAVING COUNT(DISTINCT i2.customerid) = 1
+                                ) i3 ON i3.srcaccount = i.srcaccount
+                                WHERE i.customerid IS NOT NULL AND i.srcaccount IS NOT NULL
+                                    ' . ($days ? ' AND i.date >= ?NOW? - ' . $days . ' * 86400' : '')
                             );
                             if (empty($unique_source_accounts)) {
                                 $unique_source_accounts = array();
@@ -196,29 +357,92 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                 }
             }
 
-            if (!$id && $name && $lastname) {
-                $uids = $this->db->GetCol(
-                    'SELECT id FROM customers WHERE UPPER(lastname)=UPPER(?) and UPPER(name)=UPPER(?)',
-                    array($lastname, $name)
+            $found_by_name = false;
+
+            if (!$id && strlen($name)) {
+                $customer_name_parts = array(
+                    'name' => $name,
                 );
-                if (count($uids) == 1) {
-                    $id = $uids[0];
+                if (strlen($lastname)) {
+                    $customer_name_parts['lastname'] = $lastname;
                 }
-                $found_by_name = true;
-            } else {
-                $found_by_name = false;
+                $customer_names = array(
+                    implode(' ', $customer_name_parts),
+                );
+                if (count($customer_name_parts) > 1) {
+                    $customer_names[] = implode(' ', array_reverse($customer_name_parts));
+                }
+
+                if (!empty($pattern['customer_replace'])) {
+                    foreach ($customer_names as &$customer_name) {
+                        $customer_name = preg_replace($pattern['customer_replace']['from'], $pattern['customer_replace']['to'], $customer_name);
+                    }
+                    unset($customer_name);
+                }
+                $customer_names = array_filter($customer_names, function ($customer_name) {
+                    return strlen($customer_name);
+                });
+
+                if (!empty($customer_names)) {
+                    if (count($customer_names) > 1) {
+                        $uids = $this->db->GetCol(
+                            'SELECT id
+                            FROM customers
+                            WHERE UPPER(' . $this->db->Concat('lastname', "(CASE WHEN name <> '' THEN ' ' ELSE '' END)", 'name') . ') = UPPER(?)
+                                OR UPPER(' . $this->db->Concat('lastname', "(CASE WHEN name <> '' THEN ' ' ELSE '' END)", 'name') . ') = UPPER(?)
+                                OR UPPER(' . $this->db->Concat('name', "(CASE WHEN name <> '' THEN ' ' ELSE '' END)", 'lastname') . ') = UPPER(?)
+                                OR UPPER(' . $this->db->Concat('name', "(CASE WHEN name <> '' THEN ' ' ELSE '' END)", 'lastname') . ') = UPPER(?)',
+                            array(
+                                reset($customer_names),
+                                end($customer_names),
+                                reset($customer_names),
+                                end($customer_names),
+                            )
+                        );
+                    } else {
+                        $uids = $this->db->GetCol(
+                            'SELECT id
+                            FROM customers
+                            WHERE UPPER(' . $this->db->Concat('lastname', "(CASE WHEN name <> '' THEN ' ' ELSE '' END)", 'name') . ') = UPPER(?)
+                                OR UPPER(' . $this->db->Concat('name', "(CASE WHEN name <> '' THEN ' ' ELSE '' END)", 'lastname') . ') = UPPER(?)',
+                            array(
+                                reset($customer_names),
+                                reset($customer_names),
+                            )
+                        );
+                    }
+
+                    if (!empty($uids) && count($uids) == 1) {
+                        $id = $uids[0];
+                        $found_by_name = true;
+                    }
+                }
             }
 
             if ($time) {
                 if (preg_match($pattern['date_regexp'], $time, $date)) {
-                    $time = mktime(
-                        0,
-                        0,
-                        0,
-                        $date[$pattern['pmonth']],
-                        $date[$pattern['pday']],
-                        $date[$pattern['pyear']]
-                    );
+                    if (isset($date['month'], $date['day'], $date['year'])) {
+                        $time = mktime(
+                            0,
+                            0,
+                            0,
+                            $date['month'],
+                            $date['day'],
+                            $date['year']
+                        );
+                    } elseif (isset($pattern['pmonth'], $pattern['pday'], $pattern['pyear'])) {
+                        $time = mktime(
+                            0,
+                            0,
+                            0,
+                            $date[$pattern['pmonth']],
+                            $date[$pattern['pday']],
+                            $date[$pattern['pyear']]
+                        );
+                    }
+                    if (empty($time)) {
+                        $time = time();
+                    }
                 } elseif (!is_numeric($time)) {
                     $time = time();
                 }
@@ -227,6 +451,45 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                 }
             } else {
                 $time = time();
+            }
+
+            if (isset($operdate)) {
+                if (isset($pattern['operdate_regexp'])
+                    && preg_match($pattern['operdate_regexp'], $operdate, $date)) {
+                    if (isset($date['month'], $date['day'], $date['year'])) {
+                        $operdate = mktime(
+                            0,
+                            0,
+                            0,
+                            $date['month'],
+                            $date['day'],
+                            $date['year']
+                        );
+                    } elseif (isset(
+                        $pattern['p_operdate_month'],
+                        $date[$pattern['p_operdate_month']],
+                        $pattern['p_operdate_day'],
+                        $date[$pattern['p_operdate_day']],
+                        $pattern['p_operdate_year'],
+                        $date[$pattern['p_operdate_year']]
+                    )) {
+                        $operdate = mktime(
+                            0,
+                            0,
+                            0,
+                            $date[$pattern['p_operdate_month']],
+                            $date[$pattern['p_operdate_day']],
+                            $date[$pattern['p_operdate_year']]
+                        );
+                    } else {
+                        $operdate = null;
+                    }
+                    if (empty($operdate)) {
+                        $operdate = null;
+                    }
+                } elseif (!is_numeric($operdate)) {
+                    $operdate = null;
+                }
             }
 
             $hook_data = $LMS->executeHook(
@@ -266,13 +529,15 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
             if (empty($cid)) {
                 $cid = '-';
             }
-            foreach (array('srcaccount', 'dstaccount', 'customername', 'cid') as $replace_symbol) {
+            foreach (array('srcaccount', 'dstaccount', 'customername', 'cid', 'extid') as $replace_symbol) {
                 $variable = $$replace_symbol;
-                $variable = empty($variable) ? trans('none') : $variable;
+                $variable = strlen($variable) ? $variable : trans('none');
                 $comment = str_replace('%'. $replace_symbol . '%', $variable, $comment);
             }
 
-            $customer = trim($lastname.' '.$name);
+            // insert optional string here (for now?) so we can easily see it in GUI
+            $customer = trim($lastname . ' ' . $name)
+                . (empty($optional_string) ? '' : ' [[<-- Customer | Oprional_string -->]]: ' . $optional_string);
             $comment = trim($comment);
 
             $hash = md5(
@@ -288,14 +553,17 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
 
                 if (!$this->db->GetOne('SELECT id FROM cashimport WHERE hash = ?', array($hash))) {
                     // Add file
-                    if (!$sourcefileid) {
+                    if (!isset($sourcefileid)) {
                         $args = array(
                             'name' => $filename,
                             'idate' => isset($filemtime) ? $filemtime : time(),
                             SYSLOG::RES_USER => Auth::GetCurrentUser(),
                         );
-                        $this->db->Execute('INSERT INTO sourcefiles (name, idate, userid)
-							VALUES (?, ?, ?)', array_values($args));
+                        $this->db->Execute(
+                            'INSERT INTO sourcefiles (name, idate, userid)
+                            VALUES (?, ?, ?)',
+                            array_values($args)
+                        );
                         $sourcefileid = $this->db->GetLastInsertID('sourcefiles');
                         if ($sourcefileid && $this->syslog) {
                             $args[SYSLOG::RES_SOURCEFILE] = $sourcefileid;
@@ -317,6 +585,7 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
 
                     $args = array(
                         'time' => $time,
+                        'operdate' => $operdate,
                         'value' => $value,
                         'customer' => $customer,
                         SYSLOG::RES_CUST => $id,
@@ -324,12 +593,16 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                         'hash' => $hash,
                         SYSLOG::RES_CASHSOURCE => $sourceid,
                         SYSLOG::RES_SOURCEFILE => $sourcefileid,
-                        'srcaccount' => empty($srcaccount) ? null : $srcaccount,
+                        'srcaccount' => isset($srcaccount) && strlen($srcaccount) ? $srcaccount : null,
+                        'extid' => $extid,
                     );
-                    $res = $this->db->Execute('INSERT INTO cashimport (date, value, customer,
-						customerid, description, hash, sourceid, sourcefileid, srcaccount)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', array_values($args));
-                    if ($res && $this->sylog) {
+                    $res = $this->db->Execute(
+                        'INSERT INTO cashimport (date, operdate, value, customer,
+                        customerid, description, hash, sourceid, sourcefileid, srcaccount, extid)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        array_values($args)
+                    );
+                    if ($res && $this->syslog) {
                         $args[SYSLOG::RES_CASHIMPORT] = $this->db->GetLastInsertID('cashimport');
                         $syslog_records[] = array(
                             'resource' => SYSLOG::RES_CASHIMPORT,
@@ -344,8 +617,10 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
                         'customer' => $customer,
                         'customerid' => $id,
                         'date' => $time,
+                        'operdate' => $operdate,
                         'value' => $value,
-                        'comment' => $comment
+                        'comment' => $comment,
+                        'extid' => $extid,
                     );
                 }
             }
@@ -360,7 +635,7 @@ class LMSCashManager extends LMSManager implements LMSCashManagerInterface
         }
 
         if ($sourcefileid) {
-            if ($error['sum']) {
+            if (isset($error['sum'])) {
                 $this->db->Execute('DELETE FROM cashimport WHERE sourcefileid = ?', array($sourcefileid));
                 $this->db->Execute('DELETE FROM sourcefiles WHERE id = ?', array($sourcefileid));
             } else {

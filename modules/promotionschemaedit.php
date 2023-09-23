@@ -3,7 +3,7 @@
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2021 LMS Developers
+ *  (C) Copyright 2001-2022 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -24,6 +24,8 @@
  *  $Id$
  */
 
+check_file_uploads();
+
 $schemaid = intval($_GET['id']);
 if (!$schemaid) {
     die;
@@ -33,7 +35,7 @@ $action = !empty($_GET['action']) ? $_GET['action'] : null;
 
 if ($action == 'tariff' && !empty($_POST['form'])) {
     $form = $_POST['form'];
-    $assignmentid = intval($_GET['aid']);
+    $assignmentid = isset($_GET['aid']) ? intval($_GET['aid']) : null;
 
     $data = array();
     $regexp = '/^(' . ($assignmentid ? 'tariffval|tariffperiod' : 'value|period') .')([0-9]+)$/';
@@ -146,7 +148,7 @@ if ($action == 'tariff' && !empty($_POST['form'])) {
                 $args = array(
                     SYSLOG::RES_PROMOASSIGN => $assignmentid,
                     SYSLOG::RES_PROMOSCHEMA => $schemaid,
-                    SYSLOG::RES_TARIFF => $form['tariffid'],
+                    SYSLOG::RES_TARIFF => intval($form['tariffid']),
                     SYSLOG::RES_PROMO => $promotionid,
                     'backwardperiod' => $backwardperiod,
                     'optional' => $optional,
@@ -178,14 +180,14 @@ if ($action == 'tariff' && !empty($_POST['form'])) {
             }
         }
 
-        $data['tags'] = $_POST['form']['tags'];
-        $data['alltariffs'] = $_POST['form']['alltariffs'];
+        $data['tags'] = isset($_POST['form']['tags']) ? $_POST['form']['tags'] : array();
+        $data['alltariffs'] = isset($_POST['form']['alltariffs']);
         $SESSION->save('psdform', $data);
         $SESSION->redirect('?m=promotionschemainfo&id=' . $schemaid);
     }
 
     $data = $_POST['form'];
-    $data['aid'] = $assignmentid ? $assignmentid : null;
+    $data['aid'] = $assignmentid ?: null;
 
     $SMARTY->assign('formdata', $data);
     $SMARTY->assign('error', $error);
@@ -210,8 +212,8 @@ if ($action == 'tariff' && !empty($_POST['form'])) {
     $DB->Execute('DELETE FROM promotionassignments WHERE id = ?', array($aid));
 
     $data['servicetype'] = $_POST['form']['servicetype'];
-    $data['tags'] = $_POST['form']['tags'];
-    $data['alltariffs'] = $_POST['form']['alltariffs'];
+    $data['tags'] = isset($_POST['form']['tags']) ? $_POST['form']['tags'] : array();
+    $data['alltariffs'] = empty($_POST['form']['alltariffs']) ? 0 : 1;
     $SESSION->save('psdform', $data);
     $SESSION->redirect('?m=promotionschemainfo&id=' . $schemaid);
 } else if ($action == 'tariff-reorder') {
@@ -295,6 +297,27 @@ if (isset($_POST['schema'])) {
         $error['dateto'] = trans('Incorrect date range!');
     }
 
+    $result = handle_file_uploads('attachments', $error);
+    extract($result);
+    $SMARTY->assign('fileupload', $fileupload);
+
+    $files = array();
+    if (!$error && !empty($attachments)) {
+        foreach ($attachments as $attachment) {
+            $attachment['tmpname'] = $tmppath . DIRECTORY_SEPARATOR . $attachment['name'];
+            $attachment['filename'] = $attachment['name'];
+            $files[] = $attachment;
+        }
+    }
+
+    $attachments = $DB->GetAllByKey(
+        'SELECT *, 0 AS deleted
+        FROM promotionattachments
+        WHERE promotionschemaid = ?',
+        'id',
+        array($schemaid)
+    );
+
     if (!$error && !$warning) {
         $DB->BeginTrans();
 
@@ -313,6 +336,53 @@ if (isset($_POST['schema'])) {
             WHERE id = ?',
             array_values($args)
         );
+
+        $schema_dir = STORAGE_DIR . DIRECTORY_SEPARATOR . 'promotionschemas';
+        $stat = stat($schema_dir);
+        $schema_dir .= DIRECTORY_SEPARATOR . $schemaid;
+
+        if (isset($schema['attachments']) && is_array($schema['attachments'])) {
+            foreach ($schema['attachments'] as $attachmentid => $attachment) {
+                if ($attachment['deleted']) {
+                    $filename = $schema_dir . DIRECTORY_SEPARATOR . $attachments[$attachmentid]['filename'];
+                    @unlink($filename);
+                    $DB->Execute('DELETE FROM promotionattachments WHERE id = ?', array($attachmentid));
+                } else {
+                    $DB->Execute(
+                        'UPDATE promotionattachments SET label = ?, checked = ? WHERE id = ?',
+                        array(
+                            $attachment['label'],
+                            isset($attachment['checked']) ? 1 : 0,
+                            $attachmentid,
+                        )
+                    );
+                }
+            }
+        }
+
+        if (!is_dir($schema_dir)) {
+            @mkdir($schema_dir, 0700);
+        }
+
+        foreach ($files as $file) {
+            $filename = $schema_dir . DIRECTORY_SEPARATOR . $file['filename'];
+
+            if (!file_exists($filename) && !@rename($file['tmpname'], $filename)) {
+                die(trans('Can\'t save file in "$a" directory!', $filename));
+            }
+
+            $DB->Execute(
+                'INSERT INTO promotionattachments (promotionschemaid, filename, contenttype, label, checked)
+                VALUES (?, ?, ?, ?, ?)',
+                array(
+                    $schemaid,
+                    $file['filename'],
+                    $file['type'],
+                    $file['label'],
+                    empty($file['checked']) ? 0 : 1,
+                )
+            );
+        }
 
         if ($SYSLOG) {
             $args[SYSLOG::RES_PROMO] = $oldschema['promotionid'];
@@ -367,6 +437,14 @@ if (isset($_POST['schema'])) {
         $DB->CommitTrans();
 
         $SESSION->redirect('?m=promotionschemainfo&id='.$schema['id']);
+    } else {
+        foreach ($attachments as $attachmentid => &$attachment) {
+            $attachment['deleted'] = $schema['attachments'][$attachmentid]['deleted'];
+            $attachment['checked'] = isset($schema['attachments'][$attachmentid]['checked']) ? 1 : 0;
+            $attachment['label'] = $schema['attachments'][$attachmentid]['label'];
+        }
+        unset($attachment);
+        $schema['attachments'] = $attachments;
     }
 } else {
     $schema = $oldschema;

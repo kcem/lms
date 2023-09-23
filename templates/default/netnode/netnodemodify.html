@@ -24,8 +24,9 @@
 	<input type="hidden" name="id" value="{$netnode.id}">
 
 {box_container id="netnode"}
-	{box_header icon="netnode" label="Name"}
+	{box_header icon="netnode" label="Name" content_id="netnode-name"}
 		<input type="text" name="netnode[name]" value="{$netnode.name}" maxlength="32" required
+			id="netnode-name"
 			{tip trigger="name" text="<!netnode>Enter node name" bold=1}>
 	{/box_header}
 
@@ -44,10 +45,18 @@
 {/if}
 
 			{box_row icon="type" icon_class="fa-fw" label="Type"}
-				<select name="netnode[type]" {tip text="Enter node type"}>
-					{foreach $_NETELEMENTTYPES as $idx => $type}
-						<option value="{$idx}"
-							{if $netnode.type == $idx} selected{/if}>{$type}</option>
+				{$netelementtypes = Localisation::arraySort($_NETELEMENTTYPES)}
+				<select name="netnode[type]" {tip text="Enter node type" class="lms-ui-advanced-select"}>
+					<option value="0">{trans("<!netelemtype>— other —")}</option>
+					{foreach $_NETELEMENTTYPEGROUPS as $group => $types}
+						<optgroup label="{$group}">
+							{foreach $netelementtypes as $idx => $type}
+								{if $types[$idx]}
+									<option value="{$idx}"
+										{if $netnode.type == $idx} selected{/if}>{$type}</option>
+								{/if}
+							{/foreach}
+						</optgroup>
 					{/foreach}
 				</select>
 			{/box_row}
@@ -68,7 +77,7 @@
 					data-alt-field="#projectid-value"
 					data-alt-invalid-field="#project-value"
 					{tip class="lms-ui-combobox" text="Select project for this node" trigger="project"}>
-					<option value="0"{if !$netdev.invprojectid} selected{/if}>- {trans("none")} -</option>
+					<option value="0"{if !$netdev.invprojectid} selected{/if}>{trans("— none —")}</option>
 					{foreach $NNprojects as $project}
 						<option value="{$project.id}"
 							{if ($netnode.invprojectid == $project.id)} selected{/if}>{$project.name|escape}</option>
@@ -87,7 +96,7 @@
 			{/box_row}
 
 			{box_row id="ownername" icon="division" icon_class="fa-fw" label="Owner identifier"}
-				<input type="text" name="netnode[coowner]" size="30" value="{$netnode.coowner|escape}"
+				<input type="text" name="netnode[coowner]" size="30" value="{$netnode.coowner|default:""|escape}"
 					{tip trigger="coowner" text="Enter co-owner name"}>
 			{/box_row}
 
@@ -148,14 +157,14 @@
 			{box_row icon="location" icon_class="fa-fw" label="GPS longitude"}
 				<input id="longitude" type="text" name="netnode[longitude]" value="{$netnode.longitude}"
 					{tip text="Enter node longitude (optional)" trigger="longitude"}>
-				{button type="link" icon="map" tip="Click to select gps coordinates from map"
+				{button type="link" icon="map" tip="Click to select GPS coordinates from map"
 					onclick="return gpscoordschoosewin(document.netnode.elements['netnode[longitude]'], document.netnode.elements['netnode[latitude]']);"}
 			{/box_row}
 
 			{box_row icon="location" icon_class="fa-fw" label="GPS latitude"}
 				<input id="latitude" type="text" name="netnode[latitude]" value="{$netnode.latitude}"
 					{tip text="Enter node latitude (optional)" trigger="latitude"}>
-				{button type="link" icon="map" tip="Click to select gps coordinates from map"
+				{button type="link" icon="map" tip="Click to select GPS coordinates from map"
 					onclick="return gpscoordschoosewin(document.netnode.elements['netnode[longitude]'], document.netnode.elements['netnode[latitude]']);"}
 			{/box_row}
 
@@ -188,7 +197,7 @@
 
 			{box_row icon="note" icon_class="fa-fw" label="Note"}
 				<textarea id="info" name="netnode[info]"
-					{tip text="Enter notes (optional)"} cols="50" rows="5">{$netnode.info|escape}</textarea>
+					{tip text="Enter notes (optional)"} cols="50" rows="5">{$netnode.info|default:""|escape}</textarea>
 			{/box_row}
 
 			{box_row icon="calendar" icon_class="fa-fw" label="Last inspection"}

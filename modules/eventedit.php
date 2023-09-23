@@ -29,10 +29,20 @@ include(MODULES_DIR . DIRECTORY_SEPARATOR . 'eventxajax.inc.php');
 include(MODULES_DIR . DIRECTORY_SEPARATOR . 'rtticketxajax.inc.php');
 $SMARTY->assign('xajax', $LMS->RunXajax());
 
-$aee = ConfigHelper::getConfig('phpui.allow_modify_closed_events_newer_than', 604800);
+$aee = ConfigHelper::getConfig(
+    'timetable.allow_modify_closed_events_newer_than',
+    ConfigHelper::getConfig('phpui.allow_modify_closed_events_newer_than', 604800)
+);
 
 if (isset($_GET['id'])) {
     $event = $LMS->GetEvent($_GET['id']);
+    if (empty($event)) {
+        $SESSION->redirect('?m=eventlist');
+    }
+
+    if (!empty($event['userlist'])) {
+        $event['userlist'] = array_keys($event['userlist']);
+    }
     if (!empty($event['ticketid'])) {
         $event['ticket'] = $LMS->getTickets($event['ticketid']);
     }
@@ -48,7 +58,8 @@ $backto = $SESSION->get_history_entry('m=eventlist');
 $backid = $SESSION->get('backid');
 $backurl = '?' . $backto . (empty($backid) ? '' : '#' . $backid);
 
-switch ($_GET['action']) {
+$action = isset($_GET['action']) ? $_GET['action'] : null;
+switch ($action) {
     case 'open':
         if (empty($event['closeddate']) || ($event['closed'] == 1 && $aee && (time() - $event['closeddate'] < $aee)) || ConfigHelper::checkPrivilege('superuser')) {
             $DB->Execute('UPDATE events SET closed = 0, closeduserid = NULL, closeddate = 0 WHERE id = ?', array($_GET['id']));
@@ -90,6 +101,11 @@ switch ($_GET['action']) {
 
 $params['withDeleted'] = 1;
 $userlist = $LMS->GetUserNames($params);
+
+$netdevices = $LMS->GetNetDevList();
+unset($netdevices['total'], $netdevices['order'], $netdevices['direction']);
+$SMARTY->assign('netdevices', $netdevices);
+$SMARTY->assign('netnodes', $LMS->GetNetNodes());
 
 if (isset($_POST['event'])) {
     $event = $_POST['event'];
@@ -156,13 +172,13 @@ if (isset($_POST['event'])) {
         $error['end'] = trans('End time must not precede start time!');
     }
 
-    if (ConfigHelper::checkConfig('phpui.event_overlap_warning')
+    if (ConfigHelper::checkConfig('timetable.event_overlap_warning', ConfigHelper::checkConfig('phpui.event_overlap_warning'))
         && !$error && empty($event['overlapwarned']) && ($users = $LMS->EventOverlaps(array(
             'date' => $date,
             'begintime' => $begintime,
             'enddate' => $enddate,
             'endtime' => $endtime,
-            'users' => $event['userlist'],
+            'users' => isset($event['userlist']) ? $event['userlist'] : array(),
             'ignoredevent' => $event['id'],
         )))) {
         $users_by_id = Utils::array_column($userlist, 'rname', 'id');
@@ -213,6 +229,9 @@ if (isset($_POST['event'])) {
         $event['enddate'] = $enddate;
         $event['endtime'] = $endtime;
         $event['helpdesk'] = $event['ticketid'] ?: null;
+        $event['netnodeid'] = empty($event['netnodeid']) ? null : $event['netnodeid'];
+        $event['netdevid'] = empty($event['netdevid']) ? null : $event['netdevid'];
+
         $LMS->EventUpdate($event);
 
         $hook_data = $LMS->executeHook(
@@ -256,7 +275,7 @@ if (!isset($event['usergroup'])) {
 }
     //$SESSION->restore('eventgid', $event['usergroup']);
 
-$SMARTY->assign('max_userlist_size', ConfigHelper::getConfig('phpui.event_max_userlist_size'));
+$SMARTY->assign('max_userlist_size', ConfigHelper::getConfig('timetable.event_max_userlist_size', ConfigHelper::getConfig('phpui.event_max_userlist_size')));
 if (!ConfigHelper::checkConfig('phpui.big_networks')) {
     $SMARTY->assign('customerlist', $LMS->GetAllCustomerNames());
 }

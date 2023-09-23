@@ -22,7 +22,7 @@
  *  $Id$
  */
 
-@import "lms-variables";
+@import "less/lms-variables";
 
 div.map {
 	position: absolute;
@@ -42,39 +42,47 @@ div.olPopup {
 
 div.olPopupContent {
 	overflow: visible;
-	padding: 0px;
+	padding: 0;
 }
 
-div.lmsPopupTitleBar {
+div.olControlLayerSwitcher {
+	width: auto;
+}
+
+.lms-ui-map-popup-titlebar {
 	background-color: @dark;
 	white-space: nowrap;
-	width: auto; height: 18px;
+	width: auto;
+	height: 18px;
 	overflow: visible;
 	border-left-width: 1pt; border-left-style: solid; border-top-width: 1pt; border-top-style: solid; border-right-width: 1pt; border-right-style: solid;
 	display: block;
 }
 
-div.lmsPopupTitle {
+.lms-ui-map-popup-title {
 	background-color: @dark;
 	font-weight: bold;
 	float: left;
-	width: auto; height: 16px;
+	width: auto;
+	height: 16px;
 	line-height: 16px;
 	overflow: visible;
 	padding-left: 2px;
 }
 
-div.lmsPopupCloseBox {
+.lms-ui-map-popup-closebox {
 	background-color: @dark;
 	float: right;
-	width: 16px; height: 16px;
+	width: 16px;
+	height: 16px;
 	padding: 1px;
 	overflow: visible;
 }
 
-div.lmsInfoPopupContents {
+.lms-ui-map-info-popup-contents {
 	background-color: @light;
-	padding: 6px;
+	padding-left: 0.5em;
+	padding-right: 0.5em;
 	border: @frame;
 	width: auto !important;
 	height: auto;
@@ -82,7 +90,17 @@ div.lmsInfoPopupContents {
 	overflow: visible;
 }
 
-div.lmsInfoPopupName {
+.lms-ui-map-info-popup-entry {
+	display: flex;
+	flex-direction: column;
+	padding-top: 0.3em;
+	padding-bottom: 0.3em;
+	&:not(:last-child) {
+		border-bottom: @dotted-line;
+	}
+}
+
+.lms-ui-map-info-popup-name {
 	background-color: @light;
 	font-weight: bold;
 	padding: 2px;
@@ -92,7 +110,7 @@ div.lmsInfoPopupName {
 	clear: both;
 }
 
-div.lmsInfoPopupAddress {
+.lms-ui-map-info-popup-address {
 	background-color: @light;
 	padding: 2px;
 	border: none;
@@ -102,7 +120,7 @@ div.lmsInfoPopupAddress {
 	clear: both;
 }
 
-div.lmsInfoPopupDetails {
+.lms-ui-map-info-popup-details {
 	background-color: @light;
 	padding: 2px;
 	border: none;
@@ -111,22 +129,47 @@ div.lmsInfoPopupDetails {
 	clear: both;
 }
 
-div.lmsMapPopupContents {
-	border: @frame;
-	background-color: @light;
-	width: auto; height: auto;
-	white-space: nowrap;
-	overflow: visible;
+.lms-ui-map-info-popup-details-list {
+	display: inline-flex;
+	flex-direction: column;
+	margin-left: 0.3em;
 }
 
-div.lmsMapPopupName {
+.lms-ui-map-popup-contents {
+	border: @frame;
+	background-color: @light;
+	width: auto;
+	height: auto;
+	padding: 0.5em;
+	white-space: nowrap;
+	overflow: visible;
+
+	ul {
+		margin-block-start: 0;
+		margin-block-end: 0;
+		padding-inline-start: 0;
+		list-style-position: inside;
+
+		li {
+			margin: 0;
+			padding: 0;
+
+			> span {
+				position: relative;
+				left: -0.7em;
+			}
+		}
+	}
+}
+
+.lms-ui-map-popup-name {
 	padding: 2px;
 	font-weight: bold;
 	width: auto; height: auto;
 	white-space: nowrap;
 }
 
-div.lmsMapPopupAddress {
+.lms-ui-map-popup-address {
 	padding: 2px;
 	padding-left: 10px;
 	width: auto; height: auto;
@@ -134,48 +177,50 @@ div.lmsMapPopupAddress {
 	overflow: visible;
 }
 
-div.lmsIpPopupContents {
+.lms-ui-map-ip-popup-contents {
 	border: @frame;
 	background-color: @light;
 	width: auto !important;
 	height: auto;
-	padding: 6px;
+	padding: 0.5em;
 	white-space: nowrap;
 	overflow: visible;
 }
 
-div.lmsIpPopupLabel {
+.lms-ui-map-ip-popup-label {
 	font-weight: bold;
 }
 
-div.lmsPingContentsFrame {
+.lms-ui-map-ping-contents-frame {
 	border: @frame;
-	padding: 0px;
+	padding: 0;
 	width: 450px;
 	height: 300px;
 	background-color: @light;
 }
 
-div.lmsPingContents {
+.lms-ui-map-ping-contents {
 	position: absolute;
-	left: 0px;
-	top: 0px;
+	left: 0;
+	top: 0;
 	bottom: 48px;
 	width: 100%;
 	height: auto !important;
 	overflow: auto;
-	padding: 0px;
+	padding: 0;
 }
 
 div.olControlPanel {
 	position: absolute;
-	left: 60px; top: 5px;
+	left: 60px;
+	top: 5px;
 }
 
 .olControlPanel div {
 	display: block;
 	float: left;
-	width: 22px; height: 22px;
+	width: 22px;
+	height: 22px;
 	border: @frame;
 	margin: 1px;
 	background-position: center center;
@@ -204,4 +249,10 @@ div.olControlPanel {
 
 .lmsRefreshButtonItemInactive {
 	background: white url('@{lms-img-path}/reload.gif');
+}
+
+.netrange-location {
+	text-decoration: underline;
+	display: inline-flex;
+	margin-bottom: 0.5em;
 }

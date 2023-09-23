@@ -7,7 +7,8 @@
 		</TD>
 		<TD WIDTH="180" ALIGN="RIGHT" NOWRAP>
 			LMS {$layout.lmsv} @ {$layout.hostname}<BR>
-			{$smarty.now|date_format:"%A, %x"}<BR>
+			{t a=trans($smarty.now|date_format:"l") b=$smarty.now|date_format:"Y-m-d"}<!date-format>$a, $b{/t}
+			<br>
 			{t a=$layout.logname}Prepared by: $a{/t}
 		</TD>
 	</TR>
@@ -73,7 +74,7 @@
 		<TD ALIGN="RIGHT">
 			{if ConfigHelper::checkConfig('privileges.superuser') || !ConfigHelper::checkConfig('privileges.hide_finances')}{$customerlist[customerlist].tariffvalue|money_format}<BR>{/if}
 			{if $customerlist[customerlist].email}{$customerlist[customerlist].email}<BR>{/if}
-			{if $customerlist[customerlist].ten}{trans("TEN:")} {$customerlist[customerlist].ten}{elseif $customerlist[customerlist].ssn}{trans("SSN:")} {$customerlist[customerlist].ssn}{/if}
+			{if $customerlist[customerlist].ten}{trans("TEN:")} {$customerlist[customerlist].ten}{elseif $customerlist[customerlist].ssn}{trans("SSN:")} {if empty($listdata.hidessn)}{$customerlist[customerlist].ssn}{else}{trans("(hidden)")}{/if}{/if}
 		</TD>
 		{if ConfigHelper::checkConfig('privileges.superuser') || !ConfigHelper::checkConfig('privileges.hide_finances')}
 		<TD ALIGN="RIGHT" NOWRAP>

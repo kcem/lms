@@ -37,6 +37,9 @@ class Localisation
     private static $defaultCurrency = null;
     private static $uiStrings = array();
 
+    private static $numberFormatter = null;
+    private static $numberSmartFormatter = null;
+
     public static function init()
     {
         self::$langDefs = array(
@@ -87,6 +90,17 @@ class Localisation
                 'money_format' => '$ %01.2f',
                 'money_format_in_words' => '%s %s %s/100',
                 'currency' => 'GYD',
+                //'mobile' => '(88[08]|50[0-9]|6[09][0-9])[0-9]{6}',
+            ),
+            'en_GB' => array(
+                'name' => 'English (Great Britain)',
+                'orig' => 'English (Great Britain)',
+                'locale' => 'en_GB.UTF-8',
+                'charset' => 'UTF-8',
+                'html' => 'en',
+                'money_format' => '£ %01.2f',
+                'money_format_in_words' => '%s %s %s/100',
+                'currency' => 'GBP',
                 //'mobile' => '(88[08]|50[0-9]|6[09][0-9])[0-9]{6}',
             ),
             'sk_SK' => array(
@@ -215,10 +229,28 @@ class Localisation
     private static function setLocales()
     {
         $locale = self::$langDefs[self::$systemLanguage]['locale'];
+
         setlocale(LC_COLLATE, $locale);
         setlocale(LC_CTYPE, $locale);
         setlocale(LC_TIME, $locale);
         setlocale(LC_NUMERIC, $locale);
+
+        if (!isset(self::$langDefs[self::$systemLanguage]['number_formatter'])) {
+            $fmt = new NumberFormatter($locale, NumberFormatter::DECIMAL);
+            $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, 2);
+            $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, 3);
+
+            self::$langDefs[self::$systemLanguage]['number_smart_formatter'] = $fmt;
+
+            $fmt = new NumberFormatter($locale, NumberFormatter::DECIMAL);
+            $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, 2);
+            $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, 2);
+
+            self::$langDefs[self::$systemLanguage]['number_formatter'] = $fmt;
+        }
+
+        self::$numberSmartFormatter = self::$langDefs[self::$systemLanguage]['number_smart_formatter'];
+        self::$numberFormatter = self::$langDefs[self::$systemLanguage]['number_formatter'];
     }
 
     public static function getCurrentCurrency()
@@ -372,6 +404,22 @@ class Localisation
         }
     }
 
+    public static function smartFormatNumber($number)
+    {
+        if (is_string($number)) {
+            $number = floatval($number);
+        }
+        return self::$numberSmartFormatter->format($number);
+    }
+
+    public static function formatNumber($number)
+    {
+        if (is_string($number)) {
+            $number = floatval($number);
+        }
+        return self::$numberFormatter->format($number);
+    }
+
     public static function trans()
     {
         $args = func_get_args();
@@ -387,7 +435,7 @@ class Localisation
         }
 
         for ($i = 1, $len = count($args); $i <= $len; $i++) {
-            $content = str_replace('$' . chr(97 + $i - 1), $args[$i - 1], $content);
+            $content = str_replace('$' . chr(97 + $i - 1), isset($args[$i - 1]) ? $args[$i - 1] : '-', $content);
         }
 
         $content = preg_replace('/<![^>]+>/', '', $content);

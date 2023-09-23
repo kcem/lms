@@ -27,10 +27,11 @@
 $from = $_POST['from'];
 $to = $_POST['to'];
 
-switch (intval($_POST['customer_type'])) {
+$customer_type = isset($_POST['customer_type']) ? intval($_POST['customer_type']) : -1;
+switch ($customer_type) {
     case CTYPES_PRIVATE:
     case CTYPES_COMPANY:
-        $ctype = $_POST['customer_type'];
+        $ctype = $customer_type;
         break;
 
     default:
@@ -176,6 +177,12 @@ if (in_array(DOC_DNOTE, $doctypes)) {
     $taxescount = 1;
 }
 
+if (!empty($_POST['jpk-flag']) && isset($DOC_FLAGS[$_POST['jpk-flag']])) {
+    $jpk_flag = intval($_POST['jpk-flag']);
+} else {
+    $jpk_flag = 0;
+}
+
 if (!empty($_POST['numberplanid'])) {
     if (is_array($_POST['numberplanid'])) {
         $numberplans = Utils::filterIntegers($_POST['numberplanid']);
@@ -228,6 +235,7 @@ $documents = $DB->GetAll('SELECT d.id, d.type,
 	    ' .
         ( $ctype != -1 ? ' LEFT JOIN customers cu ON d.customerid = cu.id ' : '' )
         . ' WHERE cancelled = 0 AND d.type IN ? AND (' . $wherecol . ' BETWEEN ? AND ?) '
+        . (empty($jpk_flag) ? '' : ' AND (d.flags & ' . $jpk_flag . ') > 0')
         .(isset($numberplans) ? 'AND d.numberplanid IN (' . $numberplans . ')' : '')
         .(isset($divwhere) ? $divwhere : '')
         . (isset($servicetypewhere) ? $servicetypewhere : '')
@@ -368,22 +376,50 @@ if (isset($_POST['extended'])) {
     foreach ($invoicelist as $row) {
         $invoicelist2[] = $row;
 
-        $page = ceil($i/$rows);
+        $page = ceil($i / $rows);
 
         if (!empty($row['flags'][DOC_FLAG_RECEIPT])) {
+            if (!isset($totals[$page]['total_receipt'])) {
+                $totals[$page]['total_receipt'] = 0;
+            }
             $totals[$page]['total_receipt'] += $row['brutto'] * $row['currencyvalue'];
+            if (!isset($totals[$page]['sumtax_receipt'])) {
+                $totals[$page]['sumtax_receipt'] = 0;
+            }
             $totals[$page]['sumtax_receipt'] += $row['tax'] * $row['currencyvalue'];
             foreach ($taxeslist as $idx => $tax) {
+                if (!isset($totals[$page]['val_receipt'][$idx])) {
+                    $totals[$page]['val_receipt'][$idx] = 0;
+                }
                 $totals[$page]['val_receipt'][$idx] += $row[$idx]['val'] * $row['currencyvalue'];
+                if (!isset($totals[$page]['tax_receipt'][$idx])) {
+                    $totals[$page]['tax_receipt'][$idx] = 0;
+                }
                 $totals[$page]['tax_receipt'][$idx] += $row[$idx]['tax'] * $row['currencyvalue'];
             }
         } else {
+            if (!isset($totals[$page]['total'])) {
+                $totals[$page]['total'] = 0;
+            }
             $totals[$page]['total'] += $row['brutto'] * $row['currencyvalue'];
+            if (!isset($totals[$page]['sumtax'])) {
+                $totals[$page]['sumtax'] = 0;
+            }
             $totals[$page]['sumtax'] += $row['tax'] * $row['currencyvalue'];
 
             foreach ($taxeslist as $idx => $tax) {
-                $totals[$page]['val'][$idx] += $row[$idx]['val'] * $row['currencyvalue'];
-                $totals[$page]['tax'][$idx] += $row[$idx]['tax'] * $row['currencyvalue'];
+                if (!isset($totals[$page]['val'][$idx])) {
+                    $totals[$page]['val'][$idx] = 0;
+                }
+                if (isset($row[$idx]['val'])) {
+                    $totals[$page]['val'][$idx] += $row[$idx]['val'] * $row['currencyvalue'];
+                }
+                if (!isset($totals[$page]['tax'][$idx])) {
+                    $totals[$page]['tax'][$idx] = 0;
+                }
+                if (isset($row[$idx]['tax'])) {
+                    $totals[$page]['tax'][$idx] += $row[$idx]['tax'] * $row['currencyvalue'];
+                }
             }
         }
 
@@ -393,16 +429,24 @@ if (isset($_POST['extended'])) {
     foreach ($totals as $page => $t) {
         $pages[] = $page;
 
-        $totals[$page]['alltotal_receipt'] = $totals[$page-1]['alltotal_receipt'] + $t['total_receipt'];
-        $totals[$page]['allsumtax_receipt'] = $totals[$page-1]['allsumtax_receipt'] + $t['sumtax_receipt'];
-        $totals[$page]['alltotal'] = $totals[$page-1]['alltotal'] + $t['total'];
-        $totals[$page]['allsumtax'] = $totals[$page-1]['allsumtax'] + $t['sumtax'];
+        $totals[$page]['alltotal_receipt'] = (isset($totals[$page - 1]['alltotal_receipt']) ? $totals[$page - 1]['alltotal_receipt'] : 0)
+            + (isset($t['total_receipt']) ? $t['total_receipt'] : 0);
+        $totals[$page]['allsumtax_receipt'] = (isset($totals[$page - 1]['allsumtax_receipt']) ? $totals[$page - 1]['allsumtax_receipt'] : 0)
+            + (isset($t['sumtax_receipt']) ? $t['sumtax_receipt'] : 0);
+        $totals[$page]['alltotal'] = (isset($totals[$page - 1]['alltotal']) ? $totals[$page - 1]['alltotal'] : 0)
+            + $t['total'];
+        $totals[$page]['allsumtax'] = (isset($totals[$page - 1]['allsumtax']) ? $totals[$page - 1]['allsumtax'] : 0)
+            + $t['sumtax'];
 
         foreach ($taxeslist as $idx => $tax) {
-            $totals[$page]['allval_receipt'][$idx] = $totals[$page-1]['allval_receipt'][$idx] + $t['val_receipt'][$idx];
-            $totals[$page]['alltax_receipt'][$idx] = $totals[$page-1]['alltax_receipt'][$idx] + $t['tax_receipt'][$idx];
-            $totals[$page]['allval'][$idx] = $totals[$page-1]['allval'][$idx] + $t['val'][$idx];
-            $totals[$page]['alltax'][$idx] = $totals[$page-1]['alltax'][$idx] + $t['tax'][$idx];
+            $totals[$page]['allval_receipt'][$idx] = (isset($totals[$page - 1]['allval_receipt']) ? $totals[$page - 1]['allval_receipt'][$idx] : 0)
+                + (isset($t['val_receipt'][$idx]) ? $t['val_receipt'][$idx] : 0);
+            $totals[$page]['alltax_receipt'][$idx] = (isset($totals[$page - 1]['alltax_receipt']) ? $totals[$page - 1]['alltax_receipt'][$idx] : 0)
+                + (isset($t['tax_receipt'][$idx]) ? $t['tax_receipt'][$idx] : 0);
+            $totals[$page]['allval'][$idx] = (isset($totals[$page - 1]['allval'][$idx]) ? $totals[$page - 1]['allval'][$idx] : 0)
+                + $t['val'][$idx];
+            $totals[$page]['alltax'][$idx] = (isset($totals[$page - 1]['alltax'][$idx]) ? $totals[$page-1]['alltax'][$idx] : 0)
+                + $t['tax'][$idx];
         }
     }
 
@@ -413,9 +457,9 @@ if (isset($_POST['extended'])) {
     $SMARTY->assign('pagescount', count($pages));
     $SMARTY->assign('reccount', $reccount);
 
-    $SMARTY->assign('printcustomerid', $_POST['printcustomerid']);
-    $SMARTY->assign('printcustomerssn', $_POST['printcustomerssn']);
-    $SMARTY->assign('printonlysummary', $_POST['printonlysummary']);
+    $SMARTY->assign('printcustomerid', isset($_POST['printcustomerid']));
+    $SMARTY->assign('printcustomerssn', isset($_POST['printcustomerssn']));
+    $SMARTY->assign('printonlysummary', isset($_POST['printonlysummary']));
 
     if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
         $output = $SMARTY->fetch('invoice/invoicereport-ext.html');
@@ -424,9 +468,9 @@ if (isset($_POST['extended'])) {
         $SMARTY->display('invoice/invoicereport-ext.html');
     }
 } else {
-    $SMARTY->assign('printcustomerid', $_POST['printcustomerid']);
-    $SMARTY->assign('printcustomerssn', $_POST['printcustomerssn']);
-    $SMARTY->assign('printonlysummary', $_POST['printonlysummary']);
+    $SMARTY->assign('printcustomerid', isset($_POST['printcustomerid']));
+    $SMARTY->assign('printcustomerssn', isset($_POST['printcustomerssn']));
+    $SMARTY->assign('printonlysummary', isset($_POST['printonlysummary']));
 
     if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
         $output = $SMARTY->fetch('invoice/invoicereport.html');

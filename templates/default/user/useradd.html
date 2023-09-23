@@ -31,6 +31,10 @@
 		white-space: normal;
 	}
 
+	textarea.lms-ui-autogrow {
+		min-width: 30%;
+	}
+
 </style>
 
 <H1>{$layout.pagetitle}</H1>
@@ -245,13 +249,27 @@
 			</td>
 		</tr>
 		<tr>
-			<td class="nobr">
+			<td class="valign-top">
 				{icon name="ipnetwork"}
-				<strong>{trans("Allowed hosts:")}</strong>
+				<strong>{trans("Allowed hosts")}</strong>
 			</td>
 			<td>
-				<input type="text" size="40" name="useradd[hosts]" value="{$useradd.hosts}"
-					{tip text="Enter comma-separated list of hosts or networks (optional)" trigger="hosts"}>
+				<textarea rows="2" name="useradd[hosts]" class="lms-ui-autogrow" {tip trigger="hosts"}>{strip}
+					{$useradd.hosts|escape}
+					{/strip}</textarea>
+				{hint content="Enter comma-separated list of hosts or networks (optional). User can log in only from IP addresses which belong to this list."}
+			</td>
+		</tr>
+		<tr>
+			<td class="valign-top">
+				{icon name="ipnetwork"}
+				<strong>{trans("Trusted hosts")}</strong>
+			</td>
+			<td>
+				<textarea rows="2" name="useradd[trustedhosts]" class="lms-ui-autogrow" {tip trigger="trustedhosts"}>{strip}
+					{$useradd.trustedhosts|escape}
+				{/strip}</textarea>
+				{hint content="Enter comma-separated list of hosts or networks (optional). User can log in with bypass two factor authentication from IP addresses which belong to this list."}
 			</td>
 		</tr>
 		<tr>
@@ -286,7 +304,7 @@
 									<label>
 										{trans("of selected user:")}
 										<select id="from-user" name="useradd[src_userid]">
-											<option value="">{trans("<!access-rights>- empty -")}</option>
+											<option value="">{trans("<!access-rights>— empty —")}</option>
 											{foreach $users as $user}
 												<option value="{$user.id}"
 														{if isset($useradd.src_userid) && $useradd.src_userid == $user.id} selected{/if}>{$user.rname|escape} ({$user.login})</option>
@@ -330,7 +348,7 @@
 			<td>
 				<select size="4" name="useradd[usergroups][]" id="usergroups" multiple
 					{tip text="Select user groups" class="lms-ui-multiselect" trigger="usergroups"}
-					data-default-value="{trans("- none -")}" data-shorten-to-default-value="false">
+					data-default-value="{trans("— none —")}" data-shorten-to-default-value="false">
 					{foreach $usergroups as $group}
 						<option value="{$group.id}"{if isset($selectedusergroups[$group.id])} selected{/if}>{$group.name}</option>
 					{/foreach}
@@ -346,7 +364,7 @@
 			<td>
 				<select size="4" name="useradd[customergroups][]" id="customergroups" multiple
 					{tip text="Select customer groups" class="lms-ui-multiselect" trigger="customergroups"}
-					data-default-value="{trans("- none -")}" data-shorten-to-default-value="false">
+					data-default-value="{trans("— none —")}" data-shorten-to-default-value="false">
 					{foreach $customergroups as $group}
 						<option value="{$group.id}"{if isset($selectedgroups[$group.id])} selected{/if}>{$group.name}</option>
 					{/foreach}
@@ -363,7 +381,7 @@
 				<td>
 					<select size="4" name="useradd[divisions][]" id="divisions" multiple
 						{tip text="Select divisions" class="lms-ui-multiselect" trigger="division"}
-						data-default-value="{trans("- none -")}" data-shorten-to-default-value="false" required>
+						data-default-value="{trans("— none —")}" data-shorten-to-default-value="false" required>
 						{foreach $divisions as $division}
 							<option value="{$division.id}" {if isset($useradd.divisions) && in_array($division.id, $useradd.divisions)} selected{/if}>
 								{$division.label|trunescape:30}

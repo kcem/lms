@@ -3,7 +3,7 @@
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2018 LMS Developers
+ *  (C) Copyright 2001-2022 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -41,20 +41,39 @@ function get_loc_streets($cityid)
             array($borough['stateid'], $borough['districtid'])
         );
         if (!empty($subcities)) {
-            $list = $DB->GetAll("SELECT s.id, s.name AS name1, s.name2 AS name2, (CASE WHEN s.name2 IS NOT NULL THEN " . $DB->Concat('s.name', "' '", 's.name2') . " ELSE s.name END) AS name, t.name AS typename
-				FROM location_streets s
-				LEFT JOIN location_street_types t ON (s.typeid = t.id)
-				WHERE s.cityid IN (" . implode(',', $subcities) . ")
-				ORDER BY s.name");
+            $list = $DB->GetAll(
+                "SELECT
+                    s.id,
+                    s.name AS name1,
+                    s.name2 AS name2,
+                    (CASE WHEN s.name2 IS NOT NULL THEN " . $DB->Concat('s.name', "' '", 's.name2') . " ELSE s.name END) AS name,
+                    t.name AS typename,
+                    ulic.sym_ul AS ulic
+                FROM location_streets s
+                LEFT JOIN location_street_types t ON s.typeid = t.id
+                JOIN teryt_ulic ulic ON ulic.id = s.id
+                WHERE s.cityid IN (" . implode(',', $subcities) . ")
+                ORDER BY s.name"
+            );
         }
     }
 
     if (!isset($list)) {
-        $list = $DB->GetAll("SELECT s.id, s.name AS name1, s.name2 AS name2, (CASE WHEN s.name2 IS NOT NULL THEN " . $DB->Concat('s.name', "' '", 's.name2') . " ELSE s.name END) AS name, t.name AS typename
-			FROM location_streets s
-			LEFT JOIN location_street_types t ON (s.typeid = t.id)
-			WHERE s.cityid = ?
-			ORDER BY s.name", array($cityid));
+        $list = $DB->GetAll(
+            "SELECT
+                s.id,
+                s.name AS name1,
+                s.name2 AS name2,
+                (CASE WHEN s.name2 IS NOT NULL THEN " . $DB->Concat('s.name', "' '", 's.name2') . " ELSE s.name END) AS name,
+                t.name AS typename,
+                ulic.sym_ul AS ulic
+            FROM location_streets s
+            LEFT JOIN location_street_types t ON s.typeid = t.id
+            JOIN teryt_ulic ulic ON ulic.id = s.id
+            WHERE s.cityid = ?
+            ORDER BY s.name",
+            array($cityid)
+        );
     }
 
     if ($list) {
@@ -74,16 +93,26 @@ function get_loc_cities($districtid)
 {
     global $DB, $BOROUGHTYPES;
 
-    $list = $DB->GetAll('SELECT c.id, c.name, b.name AS borough, b.type AS btype
-		FROM location_cities c
-		JOIN location_boroughs b ON (c.boroughid = b.id)
-		WHERE b.districtid = ?
-		ORDER BY c.name, b.type', array($districtid));
+    $list = $DB->GetAll(
+        'SELECT
+            c.id,
+            c.name,
+            b.name AS borough,
+            b.type AS btype,
+            ' . $DB->Concat('simc.woj', 'simc.pow', 'simc.gmi', 'simc.rodz_gmi') . ' AS terc,
+            simc.sym AS simc
+        FROM location_cities c
+        JOIN location_boroughs b ON c.boroughid = b.id
+        JOIN teryt_simc simc ON simc.cityid = c.id
+        WHERE b.districtid = ?
+        ORDER BY c.name, b.type',
+        array($districtid)
+    );
 
     if ($list) {
         foreach ($list as $idx => $row) {
             $name = sprintf('%s (%s %s)', $row['name'], $BOROUGHTYPES[$row['btype']], $row['borough']);
-            $list[$idx] = array('id' => $row['id'], 'name' => $name);
+            $list[$idx] = array('id' => $row['id'], 'name' => $name, 'terc' => $row['terc'], 'simc' => $row['simc']);
         }
     }
 
@@ -109,7 +138,10 @@ if (isset($_GET['ajax']) && (isset($_POST['what']) || isset($_GET['what']))) {
             JOIN location_boroughs b ON (c.boroughid = b.id)
             JOIN location_districts d ON (b.districtid = d.id)
             JOIN location_states s ON (d.stateid = s.id)
-            WHERE c.name ?LIKE? ' . $DB->Escape("%$what%") . '
+            WHERE c.name ?LIKE? ' . $DB->Escape("%$what%")
+                . (isset($_GET['stateid']) ? ' AND s.id = ' . intval($_GET['stateid']) : '')
+                . (isset($_GET['districtid']) ? ' AND d.id = ' . intval($_GET['districtid']) : '')
+                . '
             ORDER BY c.name, b.type LIMIT '
             . intval(ConfigHelper::getConfig(
                 'phpui.location_autosuggest_max_length',
@@ -159,6 +191,8 @@ if (isset($_GET['ajax']) && (isset($_POST['what']) || isset($_GET['what']))) {
             $cityid = $m[1];
             $districtid = $m[2];
             $stateid = $m[3];
+        } else {
+            $cityid = $districtid = $stateid = null;
         }
 
         header('Content-Type: application/json');
@@ -166,7 +200,7 @@ if (isset($_GET['ajax']) && (isset($_POST['what']) || isset($_GET['what']))) {
         $result = array();
         $index = 0;
 
-        if ($stateid) {
+        if (!empty($stateid)) {
             $list = $DB->GetAll('SELECT id, name
                 FROM location_districts WHERE stateid = ?
                 ORDER BY name', array($stateid));
@@ -177,7 +211,7 @@ if (isset($_GET['ajax']) && (isset($_POST['what']) || isset($_GET['what']))) {
             );
         }
 
-        if ($districtid) {
+        if (!empty($districtid)) {
             $list = get_loc_cities($districtid);
             $result[] = array(
                 'type' => 'city',
@@ -186,7 +220,7 @@ if (isset($_GET['ajax']) && (isset($_POST['what']) || isset($_GET['what']))) {
             );
         }
 
-        if ($cityid) {
+        if (!empty($cityid)) {
             $list = get_loc_streets($cityid);
             $result[] = array(
                 'type' => 'street',
@@ -204,32 +238,76 @@ $layout['pagetitle'] = trans('Select location');
 $streetid = isset($_GET['street']) ? intval($_GET['street']) : 0;
 $cityid = isset($_GET['city']) ? intval($_GET['city']) : 0;
 
-$states = $DB->GetAll('SELECT id, name, ident
-	FROM location_states ORDER BY name');
+$states = $DB->GetAll(
+    'SELECT id, name, ident
+    FROM location_states
+    ORDER BY name'
+);
 
-if ($streetid) {
-    $data = $DB->GetRow('SELECT s.id AS streetid, s.cityid, b.districtid, d.stateid
+if (!empty($streetid)) {
+    $data = $DB->GetRow(
+        'SELECT s.id AS streetid, s.cityid, b.districtid, d.stateid
 		FROM location_streets s
 		JOIN location_cities c ON (s.cityid = c.id)
 		JOIN location_boroughs b ON (c.boroughid = b.id)
 		JOIN location_districts d ON (b.districtid = d.id)
-		WHERE s.id = ?', array($streetid));
+		WHERE s.id = ?',
+        array($streetid)
+    );
     if ($data['cityid'] != $cityid) {
         $data['cityid'] = $cityid;
     }
-} else if ($cityid) {
-    $data = $DB->GetRow('SELECT c.id AS cityid, b.districtid, d.stateid
+} elseif (!empty($cityid)) {
+    $data = $DB->GetRow(
+        'SELECT c.id AS cityid, b.districtid, d.stateid
 		FROM location_cities c
 		JOIN location_boroughs b ON (c.boroughid = b.id)
 		JOIN location_districts d ON (b.districtid = d.id)
-		WHERE c.id = ?', array($cityid));
-} else if (count($states)) {
-    $data['stateid'] = $states[key($states)]['id'];
+		WHERE c.id = ?',
+        array($cityid)
+    );
+} elseif (!empty($states)) {
+    //$data['stateid'] = $states[key($states)]['id'];
+    $data['stateid'] = 0;
+
+    if (isset($_GET['addresstype'])) {
+        switch (intval($_GET['addresstype'])) {
+            case POSTAL_ADDRESS:
+                $variable_name = 'phpui.default_postal_address_state';
+                break;
+            case BILLING_ADDRESS:
+                $variable_name = 'phpui.default_billing_address_state';
+                break;
+            case LOCATION_ADDRESS:
+            case DEFAULT_LOCATION_ADDRESS:
+                $variable_name = 'phpui.default_location_address_state';
+                break;
+        }
+    }
+
+    if (isset($variable_name)) {
+        $default_state = ConfigHelper::getConfig($variable_name, ConfigHelper::getConfig('phpui.default_address_state'));
+    } else {
+        $default_state = ConfigHelper::getConfig('phpui.default_address_state');
+    }
+    if (!empty($default_state)) {
+        $default_state = strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $default_state));
+        foreach ($states as $state) {
+            if (strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $state['name'])) == $default_state) {
+                $data['stateid'] = $state['id'];
+                break;
+            }
+        }
+    }
 }
 
 if (!empty($data['stateid'])) {
-    $districts = $DB->GetAll('SELECT id, ident, name
-		FROM location_districts WHERE stateid = ?', array($data['stateid']));
+    $districts = $DB->GetAll(
+        'SELECT id, ident, name
+		FROM location_districts
+		WHERE stateid = ?',
+        array($data['stateid'])
+    );
     $SMARTY->assign('districts', $districts);
 }
 
@@ -243,10 +321,10 @@ if (!empty($data['cityid'])) {
     $SMARTY->assign('streets', $streets);
 }
 
-$data['varname']   = $_GET['name'];
-$data['formname']  = $_GET['form'];
+$data['varname']   = isset($_GET['name']) ? $_GET['name'] : null;
+$data['formname']  = isset($_GET['form']) ? $_GET['form'] : null;
 $data['boxid']     = ( !empty($_GET['boxid'])) ? $_GET['boxid'] : null;
-$data['countries'] = $DB->GetAll('SELECT id, name FROM countries;');
+$data['countries'] = $DB->GetAll('SELECT id, name FROM countries');
 
 $SMARTY->assign('data', $data);
 $SMARTY->assign('states', $states);

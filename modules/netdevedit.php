@@ -153,21 +153,21 @@ switch ($action) {
 
                     if (isset($row['dstport'])) { // device
                         $LMS->NetDevLink($dev2['id'], $row['id'], array(
-                        'type' => $row['type'],
-                        'srcradiosector' => $row['srcradiosector'],
-                        'dstradiosector' => $row['dstradiosector'],
-                        'technology' => $row['technology'],
-                        'speed' => $row['speed'],
-                        'srcport' => $sport,
-                        'dstport' => $row['dstport'],
+                            'type' => $row['type'],
+                            'srcradiosector' => $row['srcradiosector'],
+                            'dstradiosector' => $row['dstradiosector'],
+                            'technology' => $row['technology'],
+                            'speed' => $row['speed'],
+                            'srcport' => $sport,
+                            'dstport' => $row['dstport'],
                         ));
                     } else { // node
                         $LMS->NetDevLinkNode($row['id'], $dev2['id'], array(
-                        'type' => $row['type'],
-                        'radiosector' => $row['srcradiosector'],
-                        'technology' => $row['technology'],
-                        'speed' => $row['speed'],
-                        'port' => $sport,
+                            'type' => $row['type'],
+                            'radiosector' => $row['srcradiosector'],
+                            'technology' => $row['technology'],
+                            'speed' => $row['speed'],
+                            'port' => $sport,
                         ));
                     }
                 }
@@ -192,21 +192,21 @@ switch ($action) {
 
                     if (isset($row['dstport'])) { // device
                         $LMS->NetDevLink($dev1['id'], $row['id'], array(
-                        'type' => $row['type'],
-                        'srcradiosector' => $row['srcradiosector'],
-                        'dstradiosector' => $row['dstradiosector'],
-                        'technology' => $row['technology'],
-                        'speed' => $row['speed'],
-                        'srcport' => $sport,
-                        'dstport' => $row['dstport']
+                            'type' => $row['type'],
+                            'srcradiosector' => $row['srcradiosector'],
+                            'dstradiosector' => $row['dstradiosector'],
+                            'technology' => $row['technology'],
+                            'speed' => $row['speed'],
+                            'srcport' => $sport,
+                            'dstport' => $row['dstport']
                         ));
                     } else { // node
                         $LMS->NetDevLinkNode($row['id'], $dev1['id'], array(
-                        'type' => $row['type'],
-                        'radiosector' => $row['srcradiosector'],
-                        'technology' => $row['technology'],
-                        'speed' => $row['speed'],
-                        'port' => $sport,
+                            'type' => $row['type'],
+                            'radiosector' => $row['srcradiosector'],
+                            'technology' => $row['technology'],
+                            'speed' => $row['speed'],
+                            'port' => $sport,
                         ));
                     }
                 }
@@ -228,14 +228,16 @@ switch ($action) {
         $SESSION->redirect('?m=netdevinfo&id=' . $_GET['id']);
         break;
     case 'connect':
-        $linktype = !empty($_GET['linktype']) ? intval($_GET['linktype']) : '0';
-        $srcradiosector = ($linktype == LINKTYPE_WIRELESS ? intval($_GET['srcradiosector']) : null);
-        $dstradiosector = ($linktype == LINKTYPE_WIRELESS ? intval($_GET['dstradiosector']) : null);
-        $linktechnology = !empty($_GET['linktechnology']) ? intval($_GET['linktechnology']) : '0';
-        $linkspeed = !empty($_GET['linkspeed']) ? intval($_GET['linkspeed']) : '100000';
+        $linktype = !empty($_GET['linktype']) && ctype_digit($_GET['linktype']) ? intval($_GET['linktype']) : null;
+        $srcradiosector = $linktype == LINKTYPE_WIRELESS && ctype_digit($_GET['srcradiosector']) ? intval($_GET['srcradiosector']) : null;
+        $dstradiosector = $linktype == LINKTYPE_WIRELESS && ctype_digit($_GET['dstradiosector']) ? intval($_GET['dstradiosector']) : null;
+        $linktechnology = !empty($_GET['linktechnology']) && ctype_digit($_GET['linktechnology']) ? intval($_GET['linktechnology']) : null;
+        $linkspeed = !empty($_GET['linkspeed']) && ctype_digit($_GET['linkspeed']) ? intval($_GET['linkspeed']) : null;
         $dev['srcport'] = !empty($_GET['srcport']) ? intval($_GET['srcport']) : '0';
         $dev['dstport'] = !empty($_GET['dstport']) ? intval($_GET['dstport']) : '0';
         $dev['id'] = !empty($_GET['netdev']) ? intval($_GET['netdev']) : '0';
+        $routetype = !empty($_GET['routetype']) && ctype_digit($_GET['routetype']) ? intval($_GET['routetype']) : null;
+        $linecount = !empty($_GET['linecount']) && ctype_digit($_GET['linecount']) ? intval($_GET['linecount']) : null;
 
         $ports1 = $DB->GetOne('SELECT ports FROM netdevices WHERE id = ?', array($_GET['id']));
         $takenports1 = $LMS->CountNetDevLinks($_GET['id']);
@@ -272,6 +274,8 @@ switch ($action) {
         $SESSION->save('devlinkdstradiosector', $dstradiosector);
         $SESSION->save('devlinktechnology', $linktechnology);
         $SESSION->save('devlinkspeed', $linkspeed);
+        $SESSION->save('devlinkroutetype', $routetype);
+        $SESSION->save('devlinklinecount', $linecount);
 
         if (!$error) {
             $LMS->NetDevLink($dev['id'], $_GET['id'], array(
@@ -282,6 +286,8 @@ switch ($action) {
                 'speed' => $linkspeed,
                 'srcport' => $dev['srcport'],
                 'dstport' => $dev['dstport'],
+                'routetype' => $routetype,
+                'linecount' => $linecount,
             ));
             $SESSION->redirect('?m=netdevinfo&id=' . $_GET['id']);
         }
@@ -291,10 +297,10 @@ switch ($action) {
         break;
 
     case 'connectnode':
-        $linktype = !empty($_GET['linktype']) ? intval($_GET['linktype']) : '0';
-        $linkradiosector = ($linktype == 1 ? intval($_GET['radiosector']) : null);
-        $linktechnology = !empty($_GET['linktechnology']) ? intval($_GET['linktechnology']) : '0';
-        $linkspeed = !empty($_GET['linkspeed']) ? intval($_GET['linkspeed']) : '0';
+        $linktype = isset($_GET['linktype']) && ctype_digit($_GET['linktype']) ? intval($_GET['linktype']) : null;
+        $linkradiosector = $linktype == LINKTYPE_WIRELESS && ctype_digit($_GET['radiosector']) ? intval($_GET['radiosector']) : null;
+        $linktechnology = !empty($_GET['linktechnology']) && ctype_digit($_GET['linktechnology']) ? intval($_GET['linktechnology']) : null;
+        $linkspeed = !empty($_GET['linkspeed']) && ctype_digit($_GET['linkspeed']) ? intval($_GET['linkspeed']) : null;
         $node['port'] = !empty($_GET['port']) ? intval($_GET['port']) : '0';
         $node['id'] = !empty($_GET['nodeid']) ? intval($_GET['nodeid']) : '0';
 
@@ -397,6 +403,12 @@ switch ($action) {
 
     case 'formaddip':
         $subtitle = trans('New IP address');
+
+        if (!isset($_POST['ipadd'])) {
+            $edit = 'addip';
+            break;
+        }
+
         $nodeipdata = $_POST['ipadd'];
         $nodeipdata['ownerid'] = null;
         if (!empty($nodeipdata['macs'])) {
@@ -438,7 +450,7 @@ switch ($action) {
                 $error['ipaddr'] = trans('Specified IP address doesn\'t belong to selected network!');
             } else if (!$LMS->IsIPFree($nodeipdata['ipaddr'], $nodeipdata['netid'])) {
                 $error['ipaddr'] = trans('Specified IP address is in use!');
-            } else if ($LMS->IsIPGateway($nodedata['ipaddr'])) {
+            } else if ($LMS->IsIPGateway($nodeipdata['ipaddr'])) {
                 $error['ipaddr'] = trans('Specified IP address is network gateway!');
             }
         }
@@ -456,16 +468,20 @@ switch ($action) {
         }
 
         $macs = array();
-        foreach ($nodeipdata['macs'] as $key => $value) {
-            if (check_mac($value)) {
-                if ($value != '00:00:00:00:00:00' && !ConfigHelper::checkConfig('phpui.allow_mac_sharing')) {
-                    if ($LMS->GetNodeIDByMAC($value)) {
+        if (!empty($nodeipdata['macs'])) {
+            foreach ($nodeipdata['macs'] as $key => $value) {
+                if (check_mac($value)) {
+                    if (in_array($value, $macs)) {
                         $error['mac-input-' . $key] = trans('MAC address is in use!');
+                    } elseif ($value != '00:00:00:00:00:00' && !ConfigHelper::checkConfig('phpui.allow_mac_sharing')) {
+                        if ($LMS->GetNodeIDByMAC($value)) {
+                            $error['mac-input-' . $key] = trans('MAC address is in use!');
+                        }
                     }
+                    $macs[] = $value;
+                } elseif ($value != '') {
+                    $error['mac-input-' . $key] = trans('Incorrect MAC address!');
                 }
-                $macs[] = $value;
-            } elseif ($value != '') {
-                $error['mac-input-' . $key] = trans('Incorrect MAC address!');
             }
         }
         $nodeipdata['macs'] = $macs;
@@ -516,7 +532,7 @@ switch ($action) {
         }
 
         foreach ($nodeipdata as $key => $value) {
-            if (!is_array($value)) {
+            if (isset($value) && !is_array($value)) {
                 $nodeipdata[$key] = trim($value);
             }
         }
@@ -554,7 +570,7 @@ switch ($action) {
             } else if (!$LMS->IsIPFree($nodeipdata['ipaddr'], $nodeipdata['netid']) &&
                 $LMS->GetNodeIPByID($_GET['ip']) != $nodeipdata['ipaddr']) {
                 $error['ipaddr'] = trans('IP address is in use!');
-            } else if ($LMS->IsIPGateway($nodedata['ipaddr'])) {
+            } else if ($LMS->IsIPGateway($nodeipdata['ipaddr'])) {
                 $error['ipaddr'] = trans('Specified IP address is network gateway!');
             }
         }
@@ -579,7 +595,9 @@ switch ($action) {
         $macs = array();
         foreach ($nodeipdata['macs'] as $key => $value) {
             if (check_mac($value)) {
-                if ($value != '00:00:00:00:00:00' && !ConfigHelper::checkConfig('phpui.allow_mac_sharing')) {
+                if (in_array($value, $macs)) {
+                    $error['mac-input-' . $key] = trans('MAC address is in use!');
+                } elseif ($value != '00:00:00:00:00:00' && !ConfigHelper::checkConfig('phpui.allow_mac_sharing')) {
                     if (($nodeid = $LMS->GetNodeIDByMAC($value)) != null && $nodeid != $_GET['ip']) {
                         $error['mac-input-' . $key] = trans('MAC address is in use!');
                     }
@@ -645,10 +663,12 @@ switch ($action) {
 if (isset($netdev)) {
     $netdev['id'] = $id;
 
+    $error = array();
+
     $netdev['name'] = trim($netdev['name']);
     if ($netdev['name'] == '') {
         $error['name'] = trans('Device name is required!');
-    } elseif (strlen($netdev['name']) > 60) {
+    } elseif (strlen($netdev['name']) > 100) {
         $error['name'] = trans('Specified name is too long (max. $a characters)!', '60');
     }
 
@@ -675,6 +695,50 @@ if (isset($netdev)) {
         }
     }
 
+    $gps_coordinates_required = ConfigHelper::getConfig('phpui.netdev_gps_coordinates_required', 'none');
+
+    $longitude = filter_var($netdev['longitude'], FILTER_VALIDATE_FLOAT);
+    $latitude = filter_var($netdev['latitude'], FILTER_VALIDATE_FLOAT);
+
+    if (strlen($netdev['longitude']) && $longitude === false) {
+        $error['longitude'] = trans('Invalid longitude format!');
+    }
+    if (strlen($netdev['latitude']) && $latitude === false) {
+        $error['latitude'] = trans('Invalid latitude format!');
+    }
+
+    if (!strlen($netdev['longitude']) != !strlen($netdev['latitude'])) {
+        if (!isset($error['longitude'])) {
+            $error['longitude'] = trans('Longitude and latitude cannot be empty!');
+        }
+        if (!isset($error['latitude'])) {
+            $error['latitude'] = trans('Longitude and latitude cannot be empty!');
+        }
+    }
+
+    if ($gps_coordinates_required != 'none'
+        && ($gps_coordinates_required == 'warning'
+            || $gps_coordinates_required == 'error'
+            || ConfigHelper::checkValue($gps_coordinates_required))) {
+        if ($gps_coordinates_required != 'warning' && $gps_coordinates_required != 'error') {
+            $gps_coordinates_required = 'error';
+        }
+        if (!isset($error['longitude']) && !strlen($netdev['longitude'])) {
+            if ($gps_coordinates_required == 'error' || ConfigHelper::checkValue($gps_coordinates_required)) {
+                $error['longitude'] = trans('Longitude is required!');
+            } elseif ($gps_coordinates_required == 'warning' && !isset($warnings['netdev-longitude-'])) {
+                $warning['netdev[longitude]'] = trans('Longitude should not be empty!');
+            }
+        }
+        if (!isset($error['latitude']) && !strlen($netdev['latitude'])) {
+            if ($gps_coordinates_required == 'error' || ConfigHelper::checkValue($gps_coordinates_required)) {
+                $error['latitude'] = trans('Latitude is required!');
+            } elseif ($gps_coordinates_required == 'warning' && !isset($warnings['netdev-latitude-'])) {
+                $warning['netdev[latitude]'] = trans('Latitude should not be empty!');
+            }
+        }
+    }
+
     if (!strlen($netdev['projectid']) && !empty($netdev['project'])) {
         $project = $LMS->GetProjectByName($netdev['project']);
         if (empty($project)) {
@@ -688,7 +752,7 @@ if (isset($netdev)) {
         && ConfigHelper::checkConfig('phpui.teryt_required')
         && !empty($netdev['location_city_name']) && ($netdev['location_country_id'] == 2 || empty($netdev['location_country_id']))
         && (!isset($netdev['teryt']) || empty($netdev['location_city'])) && $LMS->isTerritState($netdev['location_state_name'])) {
-        $error['netdev[teryt]'] = trans('TERRIT address is required!');
+        $error['netdev[teryt]'] = trans('TERYT address is required!');
     }
 
     if (!empty($netdev['location_country_id'])) {
@@ -774,8 +838,8 @@ if (isset($netdev)) {
 } else {
     $netdev = $LMS->GetNetDev($id);
 
-    if (preg_match('/^[0-9]+$/', $netdev['producerid'])
-        && preg_match('/^[0-9]+$/', $netdev['modelid'])) {
+    if (isset($netdev['producerid']) && preg_match('/^[0-9]+$/', $netdev['producerid'])
+        && isset($netdev['modelid']) && preg_match('/^[0-9]+$/', $netdev['modelid'])) {
         $netdev['producer'] = $netdev['producerid'];
         $netdev['model'] = $netdev['modelid'];
     }
@@ -824,9 +888,7 @@ if (!empty($netdev['ownerid'])) {
 }
 
 $netdevips       = $LMS->GetNetDevIPs($id);
-if ($netdev['ports'] > $netdev['takenports']) {
-    $nodelist        = $LMS->GetUnlinkedNodes();
-}
+$nodelist        = $netdev['ports'] > (isset($netdev['takenports']) ? $netdev['takenports'] : $LMS->CountNetDevLinks($id)) ? $LMS->GetUnlinkedNodes() : array();
 $netdevconnected = $LMS->GetNetDevConnectedNames($id);
 $netcomplist     = $LMS->GetNetDevLinkedNodes($id);
 $netdevlist      = $LMS->GetNotConnectedDevices($id);
@@ -854,6 +916,7 @@ if ($subtitle) {
     $layout['pagetitle'] .= ' - ' . $subtitle;
 }
 
+$SMARTY->assign('divisions', $LMS->GetDivisions());
 $SMARTY->assign('NNprojects', $LMS->GetProjects());
 $SMARTY->assign('NNnodes', $LMS->GetNetNodes());
 $SMARTY->assign('producers', $LMS->GetProducers());
@@ -867,8 +930,8 @@ $SMARTY->assign('netcomplist', $netcomplist);
 $SMARTY->assign('nodelist', $nodelist);
 $SMARTY->assign('mgmurls', $LMS->GetManagementUrls(LMSNetDevManager::NETDEV_URL, $netdev['id']));
 $SMARTY->assign('radiosectors', $LMS->GetRadioSectors($netdev['id']));
-$SMARTY->assign('netdevcontype', $netdevcontype);
-$SMARTY->assign('netdevauthtype', $netdevauthtype);
+$SMARTY->assign('netdevcontype', isset($netdevcontype) ? $netdevcontype : null);
+$SMARTY->assign('netdevauthtype', isset($netdevauthtype) ? $netdevauthtype : null);
 $SMARTY->assign('netdevips', $netdevips);
 $SMARTY->assign('restnetdevlist', $netdevlist);
 $SMARTY->assign('devlinktype', $SESSION->get('devlinktype'));
@@ -876,10 +939,31 @@ $SMARTY->assign('devlinksrcradiosector', $SESSION->get('devlinksrcradiosector'))
 $SMARTY->assign('devlinkdstradiosector', $SESSION->get('devlinkdstradiosector'));
 $SMARTY->assign('devlinktechnology', $SESSION->get('devlinktechnology'));
 $SMARTY->assign('devlinkspeed', $SESSION->get('devlinkspeed'));
-$SMARTY->assign('nodelinktype', $SESSION->get('nodelinktype'));
+$SMARTY->assign('devlinkroutetype', $SESSION->get('devlinkroutetype'));
+$SMARTY->assign('devlinklinecount', $SESSION->get('devlinklinecount'));
+
+if ($SESSION->is_set('nodelinktype')) {
+    $nodelinktype = $SESSION->get('nodelinktype');
+} else {
+    $nodelinktype = intval(ConfigHelper::getConfig('phpui.default_linktype', LINKTYPE_WIRE));
+}
+$SMARTY->assign('nodelinktype', $nodelinktype);
+
+if ($SESSION->is_set('nodelinktechnology')) {
+    $nodelinktechnology = $SESSION->get('nodelinktechnology');
+} else {
+    $nodelinktechnology = intval(ConfigHelper::getConfig('phpui.default_linktechnology', 0));
+}
+$SMARTY->assign('nodelinktechnology', $nodelinktechnology);
+
+if ($SESSION->is_set('nodelinkspeed')) {
+    $nodelinkspeed = $SESSION->get('nodelinkspeed');
+} else {
+    $nodelinkspeed = intval(ConfigHelper::getConfig('phpui.default_linkspeed', 100000));
+}
+$SMARTY->assign('nodelinkspeed', $nodelinkspeed);
+
 $SMARTY->assign('nodelinkradiosector', $SESSION->get('nodelinkradiosector'));
-$SMARTY->assign('nodelinktechnology', $SESSION->get('nodelinktechnology'));
-$SMARTY->assign('nodelinkspeed', $SESSION->get('nodelinkspeed'));
 $SMARTY->assign('nastypes', $LMS->GetNAStypes());
 $SMARTY->assign('macs', $LMS->GetNetdevMacs($netdev['id']));
 $SMARTY->assign('maclabels', $LMS->GetNetdevsMacLabels());

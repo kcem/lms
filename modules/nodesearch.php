@@ -271,7 +271,7 @@ if (!isset($_POST['k'])) {
 $SESSION->save('nslk', $k);
 
 // MAC address reformatting
-$nodesearch['mac'] = macformat($nodesearch['mac']);
+$nodesearch['mac'] = empty($nodesearch['mac']) ? '' : macformat($nodesearch['mac']);
 
 $LMS->InitXajax();
 
@@ -325,7 +325,7 @@ if (isset($_GET['search'])) {
             $nodesearch['lastonlineafter'] = $lastonlineafter;
         }
 
-        $status = $nodesearch['status'];
+        $status = isset($nodesearch['status']) ? $nodesearch['status'] : null;
         unset($nodesearch['status']);
         $nodelist = $LMS->GetNodeList(array('order' => $o, 'search' => $nodesearch, 'status' => $status, 'sqlskey' => $k));
 

@@ -36,6 +36,9 @@ if (isset($_GET['template'])) {
     // read template information
     if (file_exists($file = $template_dir . DIRECTORY_SEPARATOR . 'info.php')) {
         include($file);
+        if (isset($engine['vhosts']) && isset($engine['vhosts'][$_SERVER['HTTP_HOST']])) {
+            $engine = array_merge($engine, $engine['vhosts'][$_SERVER['HTTP_HOST']]);
+        }
         if (file_exists($file = $doc_dir . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR
             . $engine['name'] . DIRECTORY_SEPARATOR . $engine['plugin'] . '.js')) {
             header('Content-Type: text/javascript');
@@ -92,6 +95,9 @@ function GetPlugin($template, $customer, $update_title, $JSResponse)
     // read template information
     if (file_exists($file = $template_dir . DIRECTORY_SEPARATOR . 'info.php')) {
         include($file);
+        if (isset($engine['vhosts']) && isset($engine['vhosts'][$_SERVER['HTTP_HOST']])) {
+            $engine = array_merge($engine, $engine['vhosts'][$_SERVER['HTTP_HOST']]);
+        }
     }
 
     // call plugin
@@ -146,6 +152,9 @@ function GetDocumentTemplates($rights, $type = null)
                 if (file_exists($infofile)) {
                     unset($engine);
                     include($infofile);
+                    if (isset($engine['vhosts']) && isset($engine['vhosts'][$_SERVER['HTTP_HOST']])) {
+                        $engine = array_merge($engine, $engine['vhosts'][$_SERVER['HTTP_HOST']]);
+                    }
                     if (isset($engine['type'])) {
                         if (!is_array($engine['type'])) {
                             $engine['type'] = array($engine['type']);
@@ -240,7 +249,7 @@ function GetReferenceDocuments($doctemplate, $customerid, $JSResponse)
     $SMARTY->assign('cid', $customerid);
     $SMARTY->assign('document', array('reference' => ''));
 
-    $references = $LMS->GetDocuments($customerid);
+    $references = $LMS->GetDocuments($customerid, null, isset($doctemplate));
 
     if (!empty($doctemplate)) {
         ob_start();
@@ -271,11 +280,22 @@ function GetReferenceDocuments($doctemplate, $customerid, $JSResponse)
                             unset($references[$idx]);
                         }
                     }
+                } else {
+                    foreach ($references as $idx => $reference) {
+                        if ($reference['doctype'] >= 0) {
+                            unset($references[$idx]);
+                        }
+                    }
                 }
+
                 break;
             }
         }
         ob_end_clean();
+    }
+
+    if (!empty($references)) {
+        $references = array_reverse($references);
     }
 
     $SMARTY->assign('references', $references);

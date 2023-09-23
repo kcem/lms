@@ -39,6 +39,10 @@ if (!isset($_POST['event'])) {
     if (isset($_GET['ticketid'])) {
             $event['ticketid'] = $_GET['ticketid'];
     }
+    if (isset($_GET['closed'])) {
+            $event['closed'] = $_GET['closed'];
+    }
+
     if (!empty($event)) {
             $_POST['event'] = $event;
     }
@@ -47,7 +51,7 @@ if (!isset($_POST['event'])) {
 if (isset($_POST['event'])) {
     $event = $_POST['event'];
 
-    if ($event['ticketid']) {
+    if (!empty($event['ticketid'])) {
         $event['ticketid'] = intval($event['ticketid']);
     }
 
@@ -61,8 +65,8 @@ if (isset($_POST['event'])) {
         $event['dateto'] = mktime(0, 0, 0, $month, $day, $year);
     }
 
-    if ($event['custid']) {
-        $event['customerid'] = $event['custid'];
+    if (!empty($event['custid'])) {
+        $event['customerid'] = intval($event['custid']);
     }
 
     $eventlist = $LMS->EventSearch($event);
@@ -78,7 +82,7 @@ if (isset($_POST['event'])) {
 
     $SMARTY->assign('eventlist', $eventlist);
     $SMARTY->assign('daylist', $daylist);
-    $SMARTY->assign('getHolidays', getHolidays($year));
+    $SMARTY->assign('getHolidays', getHolidays(isset($year) ? $year : null));
     $SMARTY->display('event/eventsearchresults.html');
     $SESSION->close();
     die;

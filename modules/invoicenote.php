@@ -271,7 +271,7 @@ switch ($action) {
             'netflag' => $cnote['netflag'],
             'paytype' => $cnote['paytype'],
             'deadline' => date("Y/m/d", $cnote['deadline']),
-            'recipient_address_id' => $_POST['cnote[recipient_address_id]'],
+            'recipient_address_id' => $cnote['recipient_address_id'],
             'use_current_customer_data' => isset($cnote['use_current_customer_data']),
             'reason' => $cnote['reason'],
         );
@@ -293,7 +293,7 @@ switch ($action) {
 
         if ($cnote['numberplanid'] && !isset($numberplans[$cnote['numberplanid']])) {
             $error['number'] = trans('Selected numbering plan doesn\'t match customer\'s division!');
-            unset($customer);
+            unset($cnote['customerid']);
         }
 
         if ($numberplans && count($numberplans) && empty($cnote['numberplanid'])) {
@@ -359,8 +359,8 @@ switch ($action) {
 
             $contents[$idx]['tariffid'] = isset($newcontents['tariffid'][$idx]) ? $newcontents['tariffid'][$idx] : $item['tariffid'];
             $contents[$idx]['servicetype'] = isset($newcontents['servicetype'][$idx]) ? $newcontents['servicetype'][$idx] : $item['servicetype'];
-            $contents[$idx]['valuebrutto'] = $newcontents['valuebrutto'][$idx] != '' ? $newcontents['valuebrutto'][$idx] : $item['valuebrutto'];
-            $contents[$idx]['valuenetto'] = $newcontents['valuenetto'][$idx] != '' ? $newcontents['valuenetto'][$idx] : $item['valuenetto'];
+            $contents[$idx]['valuebrutto'] = isset($newcontents['valuebrutto'][$idx]) && $newcontents['valuebrutto'][$idx] != '' ? $newcontents['valuebrutto'][$idx] : $item['valuebrutto'];
+            $contents[$idx]['valuenetto'] = isset($newcontents['valuenetto'][$idx]) && $newcontents['valuenetto'][$idx] != '' ? $newcontents['valuenetto'][$idx] : $item['valuenetto'];
 
             $contents[$idx]['valuebrutto'] = f_round($contents[$idx]['valuebrutto']);
             $contents[$idx]['valuenetto'] = f_round($contents[$idx]['valuenetto']);
@@ -372,12 +372,17 @@ switch ($action) {
             $taxvalue = $taxeslist[$contents[$idx]['taxid']]['value'];
 
             if ($cnote['netflag']) {
-                if ((isset($item['deleted']) && $item['deleted']) || empty($contents[$idx]['count']) || empty($contents[$idx]['valuenetto'])) {
+                if ((isset($item['deleted']) && $item['deleted']) || empty($contents[$idx]['count'])) {
                     $contents[$idx]['pdiscount'] = 0;
                     $contents[$idx]['vdiscount'] = 0;
                     $contents[$idx]['valuenetto'] = f_round($invoicecontents[$idx]['valuenetto']);
                     $contents[$idx]['cash'] = f_round($invoicecontents[$idx]['s_valuebrutto']);
                     $contents[$idx]['count'] = 0;
+                } elseif (empty($contents[$idx]['valuenetto'])) {
+                    $contents[$idx]['pdiscount'] = 0;
+                    $contents[$idx]['vdiscount'] = 0;
+                    $contents[$idx]['valuenetto'] = 0;
+                    $contents[$idx]['cash'] = f_round($invoicecontents[$idx]['s_valuebrutto']);
                 } elseif (f_round($contents[$idx]['valuenetto']) === f_round($item['valuenetto'])
                     && intval($contents[$idx]['taxid']) === intval($item['taxid'])
                     && f_round($contents[$idx]['count'], 3) === f_round($item['count'], 3)
@@ -412,12 +417,17 @@ switch ($action) {
                     $contents[$idx]['cash'] = -1 * f_round($contents[$idx]['s_valuebrutto'] - $invoicecontents[$idx]['s_valuebrutto']);
                 }
             } else {
-                if ((isset($item['deleted']) && $item['deleted']) || empty($contents[$idx]['count']) || empty($contents[$idx]['valuebrutto'])) {
+                if ((isset($item['deleted']) && $item['deleted']) || empty($contents[$idx]['count'])) {
                     $contents[$idx]['pdiscount'] = 0;
                     $contents[$idx]['vdiscount'] = 0;
                     $contents[$idx]['valuebrutto'] = f_round($invoicecontents[$idx]['valuebrutto']);
                     $contents[$idx]['cash'] = f_round($invoicecontents[$idx]['s_valuebrutto']);
                     $contents[$idx]['count'] = 0;
+                } elseif (empty($contents[$idx]['valuebrutto'])) {
+                    $contents[$idx]['pdiscount'] = 0;
+                    $contents[$idx]['vdiscount'] = 0;
+                    $contents[$idx]['valuebrutto'] = 0;
+                    $contents[$idx]['cash'] = f_round($invoicecontents[$idx]['s_valuebrutto']);
                 } elseif (f_round($contents[$idx]['valuebrutto']) === f_round($item['valuebrutto'])
                     && intval($contents[$idx]['taxid']) === intval($item['taxid'])
                     && f_round($contents[$idx]['count'], 3) === f_round($item['count'], 3)
@@ -627,7 +637,7 @@ switch ($action) {
             'paytime' => $cnote['paytime'],
             'paytype' => $cnote['paytype'],
             'flags' => (empty($cnote['flags'][DOC_FLAG_RECEIPT]) ? 0 : DOC_FLAG_RECEIPT)
-                + (empty($cnote['flags'][DOC_FLAG_TELECOM_SERVICE]) || $customer['type'] == CTYPES_COMPANY ? 0 : DOC_FLAG_TELECOM_SERVICE)
+                + (empty($cnote['flags'][DOC_FLAG_TELECOM_SERVICE]) || $invoice['customertype'] == CTYPES_COMPANY ? 0 : DOC_FLAG_TELECOM_SERVICE)
                 + ($use_current_customer_data
                     ? (isset($customer['flags'][CUSTOMER_FLAG_RELATED_ENTITY]) ? DOC_FLAG_RELATED_ENTITY : 0)
                     : (!empty($invoice['flags'][DOC_FLAG_RELATED_ENTITY]) ? DOC_FLAG_RELATED_ENTITY : 0)

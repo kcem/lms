@@ -29,10 +29,11 @@ ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_DEPRECATED);
 
 $parameters = array(
     'config-file:' => 'C:',
-    'silent' => 's',
+    'quiet' => 'q',
     'help' => 'h',
     'version' => 'v',
-    'queue:' => 'q:',
+    'section:' => 's:',
+    'queue:' => null,
     'message-file:' => 'm:',
     'use-html' => null,
     'prefer-html' => null,
@@ -88,8 +89,10 @@ lms-rtparser.php
 -C, --config-file=/etc/lms/lms.ini      alternate config file (default: /etc/lms/lms.ini);
 -h, --help                      print this help and exit;
 -v, --version                   print version info and exit;
--s, --silent                    suppress any output, except errors;
--q, --queue=<queueid>           queue ID (it means, QUEUE ID, numeric! NOT NAME! also
+-q, --quiet                     suppress any output, except errors;
+-s, --section=<section-name>    section name from lms configuration where settings
+                                are stored
+    --queue=<queueid>           queue ID (it means, QUEUE ID, numeric! NOT NAME! also
                                 its required to run!);
 -m, --message-file=<message-file>
                                 use message file instead of standard input;
@@ -105,7 +108,7 @@ EOF;
     exit(0);
 }
 
-$quiet = array_key_exists('silent', $options);
+$quiet = isset($options['quiet']);
 if (!$quiet) {
     print <<<EOF
 lms-rtparser.php
@@ -114,7 +117,10 @@ lms-rtparser.php
 EOF;
 }
 
-if (array_key_exists('config-file', $options)) {
+$config_section = isset($options['section']) && preg_match('/^[a-z0-9-_]+$/i', $options['section'])
+    ? $options['section'] : 'rt';
+
+if (isset($options['config-file'])) {
     $CONFIG_FILE = $options['config-file'];
 } else {
     $CONFIG_FILE = DIRECTORY_SEPARATOR . 'etc' . DIRECTORY_SEPARATOR . 'lms' . DIRECTORY_SEPARATOR . 'lms.ini';
@@ -157,7 +163,7 @@ try {
     $DB = LMSDB::getInstance();
 } catch (Exception $ex) {
     trigger_error($ex->getMessage(), E_USER_WARNING);
-    // can't working without database
+    // can't work without database
     die("Fatal error: cannot connect to database!" . PHP_EOL);
 }
 
@@ -179,13 +185,15 @@ if (empty($hostname)) {
     $hostname = 'example.com';
 }
 
-$smtp_options = $LMS->GetRTSmtpOptions();
+$smtp_options = $LMS->GetRTSmtpOptions($config_section);
 
 $queue = 0;
 if (isset($options['queue'])) {
     $queue = $options['queue'];
 }
-$queue = ConfigHelper::getConfig('rt.parser_default_queue', ConfigHelper::getConfig('rt.default_queue', $queue));
+if (empty($queue)) {
+    $queue = ConfigHelper::getConfig($config_section . '.parser_default_queue');
+}
 
 if (preg_match('/^[0-9]+$/', $queue)) {
     $queue = intval($queue);
@@ -195,39 +203,42 @@ if (preg_match('/^[0-9]+$/', $queue)) {
 } else {
     $queue = $LMS->GetQueueIdByName($queue);
 }
-$categories = ConfigHelper::getConfig('rt.default_categories', 'default');
+$categories = ConfigHelper::getConfig($config_section . '.default_categories', 'default');
 $categories = preg_split('/\s*,\s*/', trim($categories));
-$auto_open = ConfigHelper::checkValue(ConfigHelper::getConfig('rt.auto_open', true));
-//$tmp_dir = ConfigHelper::getConfig('rt.tmp_dir', '', true);
-$notify = ConfigHelper::checkValue(ConfigHelper::getConfig('rt.newticket_notify', true));
-$customerinfo = ConfigHelper::checkValue(ConfigHelper::getConfig('rt.include_customerinfo', '1'));
-$lms_url = ConfigHelper::getConfig('rt.lms_url', 'http://localhost/lms/');
-$autoreply_from = ConfigHelper::getConfig('rt.mail_from', '', true);
-$autoreply_name = ConfigHelper::getConfig('rt.mail_from_name', '', true);
-$autoreply_subject = ConfigHelper::getConfig('rt.autoreply_subject', "[RT#%tid] Receipt of request '%subject'");
-$autoreply_body = ConfigHelper::getConfig('rt.autoreply_body', '', true);
-$autoreply = ConfigHelper::checkValue(ConfigHelper::getConfig('rt.autoreply', '1'));
-$subject_ticket_regexp_match = ConfigHelper::getConfig('rt.subject_ticket_regexp_match', '\[RT#(?<ticketid>[0-9]{6,})\]');
-$modify_ticket_timeframe = ConfigHelper::getConfig('rt.allow_modify_resolved_tickets_newer_than', 604800);
+$auto_open = ConfigHelper::checkConfig($config_section . '.auto_open', true);
+//$tmp_dir = ConfigHelper::getConfig($config_section . '.tmp_dir', '', true);
+$notify = ConfigHelper::checkConfig(
+    $config_section . '.new_ticket_notify',
+    ConfigHelper::checkConfig($config_section . '.newticket_notify', true)
+);
+$customerinfo = ConfigHelper::checkConfig($config_section . '.include_customerinfo', true);
+$lms_url = ConfigHelper::getConfig($config_section . '.lms_url', 'http://localhost/lms/');
+$autoreply_from = ConfigHelper::getConfig($config_section . '.mail_from', '', true);
+$autoreply_name = ConfigHelper::getConfig($config_section . '.mail_from_name', '', true);
+$autoreply_subject = ConfigHelper::getConfig($config_section . '.autoreply_subject', "[RT#%tid] Receipt of request '%subject'");
+$autoreply_body = ConfigHelper::getConfig($config_section . '.autoreply_body', '', true);
+$autoreply = ConfigHelper::checkConfig($config_section . '.autoreply', true);
+$subject_ticket_regexp_match = ConfigHelper::getConfig($config_section . '.subject_ticket_regexp_match', '\[RT#(?<ticketid>[0-9]{6,})\]');
+$modify_ticket_timeframe = ConfigHelper::getConfig($config_section . '.allow_modify_resolved_tickets_newer_than', 604800);
 
-$detect_customer_location_address = ConfigHelper::checkConfig('rt.detect_customer_location_address');
+$detect_customer_location_address = ConfigHelper::checkConfig($config_section . '.detect_customer_location_address');
 
 $image_max_size = ConfigHelper::getConfig('phpui.uploaded_image_max_size');
 
 $rtparser_server = ConfigHelper::getConfig(
-    'rt.imap_server',
+    $config_section . '.imap_server',
     isset($smtp_options['host']) ? $smtp_options['host'] : ConfigHelper::GetConfig('mail.smtp_host')
 );
 $rtparser_username = ConfigHelper::getConfig(
-    'rt.imap_username',
+    $config_section . '.imap_username',
     isset($smtp_options['user']) ? $smtp_options['user'] : ConfigHelper::GetConfig('mail.smtp_username')
 );
 $rtparser_password = ConfigHelper::getConfig(
-    'rt.imap_password',
+    $config_section . '.imap_password',
     isset($smtp_options['pass']) ? $smtp_options['pass'] : ConfigHelper::GetConfig('mail.smtp_password')
 );
-$rtparser_use_seen_flag = ConfigHelper::checkValue(ConfigHelper::getConfig('rt.imap_use_seen_flag', true));
-$rtparser_folder = ConfigHelper::getConfig('rt.imap_folder', 'INBOX');
+$rtparser_use_seen_flag = ConfigHelper::checkConfig($config_section . '.imap_use_seen_flag', true);
+$rtparser_folder = ConfigHelper::getConfig($config_section . '.imap_folder', 'INBOX');
 
 $url_props = parse_url($lms_url);
 
@@ -359,6 +370,34 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
         $partdata = mailparse_msg_get_part_data($part);
         $headers = $partdata['headers'];
 
+        if (isset($headers['return-path'])) {
+            if (is_array($headers['return-path'])) {
+                $return_paths = $headers['return-path'];
+            } else {
+                $return_paths = array($return_paths);
+            }
+            $return_paths = array_filter($return_paths, function ($var) {
+                return $var == '<>' || strtolower($var) == '<mailer-daemon>';
+            });
+            if (!empty($return_paths) || isset($headers['auto-submitted']) && $headers['auto-submitted'] == 'auto-replied') {
+                mailparse_msg_free($mail);
+
+                if ($postid !== false && $postid !== null) {
+                    if ($rtparser_use_seen_flag) {
+                        imap_setflag_full($ih, $postid, "\\Seen");
+                    } else {
+                        imap_clearflag_full($ih, $postid, "\\Seen");
+                    }
+
+                    $postid = next($posts);
+                }
+
+                unset($buffer);
+
+                continue;
+            }
+        }
+
         $mh_from = iconv_mime_decode($headers['from']);
         $mh_to = iconv_mime_decode($headers['to']);
         $mh_cc = isset($headers['cc']) ? iconv_mime_decode($headers['cc']) : '';
@@ -368,7 +407,11 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
         if (!strlen($mh_subject)) {
             $mh_subject = trans('(no subject)');
         }
-        $mh_references = iconv_mime_decode($headers['references']);
+        if (isset($headers['references'])) {
+            $mh_references = iconv_mime_decode($headers['references']);
+        } else {
+            $mh_references = '';
+        }
         $files = array();
         $attachments = array();
 
@@ -661,11 +704,19 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
         }
 
         // find customerid
-        $reqcustid = $DB->GetOne("SELECT c.id FROM customers c
-            JOIN customercontacts cc ON cc.customerid = c.id AND (cc.type & ? > 0)
-            WHERE cc.contact = ?", array(CONTACT_EMAIL | CONTACT_INVOICES | CONTACT_NOTIFICATIONS, $fromemail));
-        if (empty($reqcustid)) {
+        $reqcustid = $DB->GetCol(
+            "SELECT c.id FROM customers c
+            JOIN customercontacts cc ON cc.customerid = c.id AND (cc.type & ?) > 0
+            WHERE cc.contact = ?",
+            array(
+                CONTACT_EMAIL,
+                $fromemail,
+            )
+        );
+        if (empty($reqcustid) || count($reqcustid) > 1) {
             $reqcustid = 0;
+        } else {
+            $reqcustid = reset($reqcustid);
         }
 
         // get sender e-mail if not specified
@@ -749,7 +800,19 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
 
             $message_id = $LMS->GetLastMessageID();
 
-            if ($autoreply) {
+            if ($autoreply && (empty($reqcustid) || $DB->GetOne(
+                'SELECT cc.id
+                FROM customercontacts cc
+                WHERE cc.customerid = ?
+                    AND (cc.type & ?) = ?
+                    AND cc.contact = ?',
+                array(
+                    $reqcustid,
+                    CONTACT_EMAIL | CONTACT_HELPDESK_NOTIFICATIONS,
+                    CONTACT_EMAIL | CONTACT_HELPDESK_NOTIFICATIONS,
+                    $fromemail,
+                )
+            ))) {
                 $autoreply_subject = preg_replace_callback(
                     '/%(\\d*)tid/',
                     function ($m) use ($ticket_id) {
@@ -802,7 +865,7 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
         $ticket = $LMS->GetTicketContents($ticket_id);
 
         if ($notify || $ticket['customerid'] && $reqcustid) {
-            $helpdesk_sender_name = ConfigHelper::getConfig('phpui.helpdesk_sender_name');
+            $helpdesk_sender_name = ConfigHelper::getConfig($config_section . '.sender_name', ConfigHelper::getConfig('phpui.helpdesk_sender_name'));
             if (!empty($helpdesk_sender_name)) {
                 $mailfname = '"' . $LMS->GetQueueName($queue) . '"';
             } else {
@@ -825,12 +888,28 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
             if ($ticket['customerid'] && $reqcustid) {
                 $info = $LMS->GetCustomer($ticket['customerid'], true);
 
-                $emails = array_map(function ($contact) {
-                    return $contact['fullname'];
-                }, $LMS->GetCustomerContacts($ticket['customerid'], CONTACT_EMAIL));
-                $phones = array_map(function ($contact) {
-                    return $contact['fullname'];
-                }, $LMS->GetCustomerContacts($ticket['customerid'], CONTACT_LANDLINE | CONTACT_MOBILE));
+                $emails = array_map(
+                    function ($contact) {
+                        return $contact['fullname'];
+                    },
+                    array_filter(
+                        $LMS->GetCustomerContacts($ticket['customerid'], CONTACT_EMAIL),
+                        function ($contact) {
+                            return $contact['type'] & CONTACT_HELPDESK_NOTIFICATIONS;
+                        }
+                    )
+                );
+                $phones = array_map(
+                    function ($contact) {
+                        return $contact['fullname'];
+                    },
+                    array_filter(
+                        $LMS->GetCustomerContacts($ticket['customerid'], CONTACT_LANDLINE | CONTACT_MOBILE),
+                        function ($contact) {
+                            return $contact['type'] & CONTACT_HELPDESK_NOTIFICATIONS;
+                        }
+                    )
+                );
 
                 if ($notify && $customerinfo) {
                     $params = array(
@@ -840,8 +919,20 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
                         'emails' => $emails,
                         'phones' => $phones,
                     );
-                    $mail_customerinfo = $LMS->ReplaceNotificationCustomerSymbols(ConfigHelper::getConfig('phpui.helpdesk_customerinfo_mail_body'), $params);
-                    $sms_customerinfo = $LMS->ReplaceNotificationCustomerSymbols(ConfigHelper::getConfig('phpui.helpdesk_customerinfo_sms_body'), $params);
+                    $mail_customerinfo = $LMS->ReplaceNotificationCustomerSymbols(
+                        ConfigHelper::getConfig(
+                            $config_section . '.notification_mail_body_customerinfo_format',
+                            ConfigHelper::getConfig('phpui.helpdesk_customerinfo_mail_body')
+                        ),
+                        $params
+                    );
+                    $sms_customerinfo = $LMS->ReplaceNotificationCustomerSymbols(
+                        ConfigHelper::getConfig(
+                            $config_section . '.notification_sms_body_customerinfo_format',
+                            ConfigHelper::getConfig('phpui.helpdesk_customerinfo_sms_body')
+                        ),
+                        $params
+                    );
                 }
             } elseif ($customerinfo && !empty($fromname)) {
                 $mail_customerinfo = "\n\n-- \n" . trans('Customer:') . ' ' . $fromname;
@@ -861,15 +952,15 @@ while (isset($buffer) || ($postid !== false && $postid !== null)) {
                 'url' => $lms_url,
             );
 
-            $headers['Subject'] = $LMS->ReplaceNotificationSymbols(ConfigHelper::getConfig('phpui.helpdesk_notification_mail_subject'), $params);
+            $headers['Subject'] = $LMS->ReplaceNotificationSymbols(ConfigHelper::getConfig($config_section . '.notification_mail_subject', ConfigHelper::getConfig('phpui.helpdesk_notification_mail_subject')), $params);
 
             $params['customerinfo'] = isset($mail_customerinfo) ? $mail_customerinfo : null;
             $params['contenttype'] = $contenttype;
-            $body = $LMS->ReplaceNotificationSymbols(ConfigHelper::getConfig('phpui.helpdesk_notification_mail_body'), $params);
+            $body = $LMS->ReplaceNotificationSymbols(ConfigHelper::getConfig($config_section . '.notification_mail_body', ConfigHelper::getConfig('phpui.helpdesk_notification_mail_body')), $params);
 
             $params['customerinfo'] = isset($sms_customerinfo) ? $sms_customerinfo : null;
             $params['contenttype'] = 'text/plain';
-            $sms_body = $LMS->ReplaceNotificationSymbols(ConfigHelper::getConfig('phpui.helpdesk_notification_sms_body'), $params);
+            $sms_body = $LMS->ReplaceNotificationSymbols(ConfigHelper::getConfig($config_section . '.notification_sms_body', ConfigHelper::getConfig('phpui.helpdesk_notification_sms_body')), $params);
 
             if ($contenttype == 'text/html') {
                 $headers['X-LMS-Format'] = 'html';

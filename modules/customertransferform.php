@@ -36,13 +36,16 @@ $tranferform_common_data = $transferform->GetCommonData(array('customerid' => $c
 
 $tranferform_custom_data = array(
     'title' => $payment_title,
-    'paytype' => 8, // only to hide deadline
+    'paytype' => PAYTYPE_PAID, // only to hide deadline
     'barcode' => $payment_title,
 );
 
 if ($type == LMSTcpdfTransferForm::VALUE_ASSIGNMENTS) {
     //get assignments grouped by currency
     $currency_assignments = $LMS->GetCustomerAssignmentValue($cid);
+    if (empty($currency_assignments)) {
+        access_denied('Active assignments not found!');
+    }
 
     $form_count = 0;
     $perpage_form_count = 1;

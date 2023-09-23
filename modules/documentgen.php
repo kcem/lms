@@ -59,7 +59,7 @@ if (isset($_POST['document'])) {
         $error['number'] = trans('Document with specified number exists!');
     }
 
-    $allow_past_date = ConfigHelper::checkValue(ConfigHelper::getConfig('documents.allow_past_date', 'true'));
+    $allow_past_date = ConfigHelper::checkConfig('documents.allow_past_date', true);
     if (!$allow_past_date) {
         $today = strtotime('today');
     }
@@ -210,6 +210,10 @@ if (isset($_POST['document'])) {
         if ($document['templ']) {
             // read template information
             include($template_dir . DIRECTORY_SEPARATOR . 'info.php');
+
+            if (isset($engine['vhosts']) && isset($engine['vhosts'][$_SERVER['HTTP_HOST']])) {
+                $engine = array_merge($engine, $engine['vhosts'][$_SERVER['HTTP_HOST']]);
+            }
         }
 
         foreach ($customerlist as $idx => $gencust) {
@@ -249,15 +253,27 @@ if (isset($_POST['document'])) {
                 // run template engine
                 if (file_exists($doc_dir . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR
                     . $engine['engine'] . DIRECTORY_SEPARATOR . 'engine.php')) {
+                    $SMARTY->AddTemplateDir(
+                        array(
+                            'documentgen' => $doc_dir . DIRECTORY_SEPARATOR . 'templates'
+                                . DIRECTORY_SEPARATOR . $engine['name']
+                        )
+                    );
                     include($doc_dir . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR
                         . $engine['engine'] . DIRECTORY_SEPARATOR . 'engine.php');
                 } else {
                     include(DOC_DIR . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR . 'default'
                          . DIRECTORY_SEPARATOR . 'engine.php');
+                    $SMARTY->AddTemplateDir(
+                        array(
+                            'documentgen' => DOC_DIR . DIRECTORY_SEPARATOR . 'templates'
+                                . DIRECTORY_SEPARATOR . 'default'
+                        )
+                    );
                 }
 
                 if ($output) {
-                    $file = DOC_DIR . DIRECTORY_SEPARATOR . 'tmp.file';
+                    $file = tempnam(DOC_DIR, 'tmp.file');
                     $fh = fopen($file, 'w');
                     fwrite($fh, $output);
                     fclose($fh);
@@ -399,6 +415,10 @@ if (isset($_POST['document'])) {
 
             // read template information
             include($template_dir . DIRECTORY_SEPARATOR . 'info.php');
+            if (isset($engine['vhosts']) && isset($engine['vhosts'][$_SERVER['HTTP_HOST']])) {
+                $engine = array_merge($engine, $engine['vhosts'][$_SERVER['HTTP_HOST']]);
+            }
+
             // set some variables
             $SMARTY->assign('document', $document);
 
@@ -423,6 +443,22 @@ if (isset($_POST['document'])) {
                 $engine,
                 isset($document['attachments']) ? $document['attachments'] : array()
             ));
+        }
+    }
+} else {
+    $document['type'] = '';
+
+    $default_type = ConfigHelper::getConfig('documents.default_type', '', true);
+    if (strlen($default_type)) {
+        $doctype_aliases_flipped = array_flip($DOCTYPE_ALIASES);
+        if (ctype_digit($default_type)) {
+            if (isset($DOCTYPE_ALIASES[$default_type])) {
+                $document['type'] = $default_type;
+            }
+        } else {
+            if (isset($doctype_aliases_flipped[$default_type])) {
+                $document['type'] = $doctype_aliases_flipped[$default_type];
+            }
         }
     }
 }

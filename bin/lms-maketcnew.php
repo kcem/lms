@@ -4,7 +4,7 @@
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2020 LMS Developers
+ *  (C) Copyright 2001-2023 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -40,6 +40,7 @@ $parameters = array(
     'quiet' => 'q',
     'help' => 'h',
     'version' => 'v',
+    'section:' => 's:',
     'host:' => 'H:',
 );
 
@@ -77,7 +78,7 @@ foreach (array_flip(array_filter($long_to_shorts, function ($value) {
 if (array_key_exists('version', $options)) {
     print <<<EOF
 lms-maketcnew.php
-(C) 2001-2020 LMS Developers
+(C) 2001-2023 LMS Developers
 
 EOF;
     exit(0);
@@ -86,12 +87,14 @@ EOF;
 if (array_key_exists('help', $options)) {
     print <<<EOF
 lms-maketcnew.php
-(C) 2001-2020 LMS Developers
+(C) 2001-2023 LMS Developers
 
 -C, --config-file=/etc/lms/lms.ini      alternate config file (default: /etc/lms/lms.ini);
 -h, --help                      print this help and exit;
 -v, --version                   print version info and exit;
 -q, --quiet                     suppress any output, except errors;
+-s, --section=<section-name>    section name from lms configuration where settings
+                                are stored
 -H, --host=<host-name>          allows to limit networks to those assigned to specified host
 
 EOF;
@@ -102,7 +105,7 @@ $quiet = array_key_exists('quiet', $options);
 if (!$quiet) {
     print <<<EOF
 lms-maketcnew.php
-(C) 2001-2020 LMS Developers
+(C) 2001-2023 LMS Developers
 
 EOF;
 }
@@ -157,34 +160,37 @@ try {
 require_once(LIB_DIR . DIRECTORY_SEPARATOR . 'common.php');
 //require_once(LIB_DIR . DIRECTORY_SEPARATOR . 'definitions.php');
 
-$script_file = ConfigHelper::getConfig('tcnew.script_file', "/etc/rc.d/rc.htb");
-$script_file_day = ConfigHelper::getConfig('tcnew.script_file_day', "/etc/rc.d/rc.htb.day");
-$script_file_night = ConfigHelper::getConfig('tcnew.script_file_night', "/etc/rc.d/rc.htb.night");
-$script_permission = ConfigHelper::getConfig('tcnew.script_permission', "0700");
-$script_begin = ConfigHelper::getConfig('tcnew.begin', "#!/bin/bash\n\nPATH=\"/bin:/sbin:/usr/bin:/usr/sbin\"\n\n");
-$script_begin_day = ConfigHelper::getConfig('tcnew.begin_day', $script_begin);
-$script_begin_night = ConfigHelper::getConfig('tcnew.begin_night', $script_begin);
-$script_end = ConfigHelper::getConfig('tcnew.end', '', true);
-$script_end_day = ConfigHelper::getConfig('tcnew.end_day', $script_end);
-$script_end_night = ConfigHelper::getConfig('tcnew.end_night', $script_end);
-$script_class_up = ConfigHelper::getConfig('tcnew.class_up', '', true);
-$script_class_up_day = ConfigHelper::getConfig('tcnew.class_up_day', $script_class_up);
-$script_class_up_night = ConfigHelper::getConfig('tcnew.class_up_night', $script_class_up);
-$script_class_down = ConfigHelper::getConfig('tcnew.class_down', '', true);
-$script_class_down_day = ConfigHelper::getConfig('tcnew.class_down_day', $script_class_down);
-$script_class_down_night = ConfigHelper::getConfig('tcnew.class_down_night', $script_class_down);
-$script_filter_up = ConfigHelper::getConfig('tcnew.filter_up', '', true);
-$script_filter_up_day = ConfigHelper::getConfig('tcnew.filter_up_day', '', true);
-$script_filter_up_night = ConfigHelper::getConfig('tcnew.filter_up_night', '', true);
-$script_filter_down = ConfigHelper::getConfig('tcnew.filter_down', '', true);
-$script_filter_down_day = ConfigHelper::getConfig('tcnew.filter_down_day', '', true);
-$script_filter_down_night = ConfigHelper::getConfig('tcnew.filter_down_night', '', true);
-$script_climit = ConfigHelper::getConfig('tcnew.climit', '', true);
-$script_plimit = ConfigHelper::getConfig('tcnew.plimit', '', true);
-$script_multi_mac = ConfigHelper::checkConfig('tcnew.multi_mac');
-$create_device_channels = ConfigHelper::checkConfig('tcnew.create_device_channels');
-$all_assignments = ConfigHelper::checkConfig('tcnew.all_assignments');
-$ignore_assignment_suspensions = ConfigHelper::checkConfig('tcnew.ignore_assignment_suspensions');
+$config_section = (array_key_exists('section', $options) && preg_match('/^[a-z0-9-_]+$/i', $options['section'])
+    ? $options['section'] : 'tcnew');
+
+$script_file = ConfigHelper::getConfig($config_section . '.script_file', "/etc/rc.d/rc.htb");
+$script_file_day = ConfigHelper::getConfig($config_section . '.script_file_day', "/etc/rc.d/rc.htb.day");
+$script_file_night = ConfigHelper::getConfig($config_section . '.script_file_night', "/etc/rc.d/rc.htb.night");
+$script_permission = ConfigHelper::getConfig($config_section . '.script_permission', "0700");
+$script_begin = ConfigHelper::getConfig($config_section . '.begin', "#!/bin/bash\n\nPATH=\"/bin:/sbin:/usr/bin:/usr/sbin\"\n\n");
+$script_begin_day = ConfigHelper::getConfig($config_section . '.begin_day', $script_begin);
+$script_begin_night = ConfigHelper::getConfig($config_section . '.begin_night', $script_begin);
+$script_end = ConfigHelper::getConfig($config_section . '.end', '', true);
+$script_end_day = ConfigHelper::getConfig($config_section . '.end_day', $script_end);
+$script_end_night = ConfigHelper::getConfig($config_section . '.end_night', $script_end);
+$script_class_up = ConfigHelper::getConfig($config_section . '.class_up', '', true);
+$script_class_up_day = ConfigHelper::getConfig($config_section . '.class_up_day', $script_class_up);
+$script_class_up_night = ConfigHelper::getConfig($config_section . '.class_up_night', $script_class_up);
+$script_class_down = ConfigHelper::getConfig($config_section . '.class_down', '', true);
+$script_class_down_day = ConfigHelper::getConfig($config_section . '.class_down_day', $script_class_down);
+$script_class_down_night = ConfigHelper::getConfig($config_section . '.class_down_night', $script_class_down);
+$script_filter_up = ConfigHelper::getConfig($config_section . '.filter_up', '', true);
+$script_filter_up_day = ConfigHelper::getConfig($config_section . '.filter_up_day', '', true);
+$script_filter_up_night = ConfigHelper::getConfig($config_section . '.filter_up_night', '', true);
+$script_filter_down = ConfigHelper::getConfig($config_section . '.filter_down', '', true);
+$script_filter_down_day = ConfigHelper::getConfig($config_section . '.filter_down_day', '', true);
+$script_filter_down_night = ConfigHelper::getConfig($config_section . '.filter_down_night', '', true);
+$script_climit = ConfigHelper::getConfig($config_section . '.climit', '', true);
+$script_plimit = ConfigHelper::getConfig($config_section . '.plimit', '', true);
+$script_multi_mac = ConfigHelper::checkConfig($config_section . '.multi_mac');
+$create_device_channels = ConfigHelper::checkConfig($config_section . '.create_device_channels');
+$all_assignments = ConfigHelper::checkConfig($config_section . '.all_assignments');
+$ignore_assignment_suspensions = ConfigHelper::checkConfig($config_section . '.ignore_assignment_suspensions');
 
 $host = isset($options['host']) ? mb_strtoupper($options['host']) : null;
 
@@ -198,11 +204,11 @@ if ($host && empty($existing_networks)) {
 }
 
 // get selected networks from ini file
-$networks = ConfigHelper::getConfig('tcnew.networks', '', true);
+$networks = ConfigHelper::getConfig($config_section . '.networks', '', true);
 $networks = preg_split('/(\s+|\s*,\s*)/', $networks, -1, PREG_SPLIT_NO_EMPTY);
 
 // exclude networks set in config value
-$excluded_networks = ConfigHelper::getConfig('tcnew.excluded_networks', '', true);
+$excluded_networks = ConfigHelper::getConfig($config_section . '.excluded_networks', '', true);
 $excluded_networks = preg_split('/(\s+|\s*,\s*)/', $excluded_networks, -1, PREG_SPLIT_NO_EMPTY);
 
 if (empty($networks)) {
@@ -218,12 +224,12 @@ $networks = $DB->GetAllByKey(
 );
 
 // customer groups
-$customergroups = ConfigHelper::getConfig('tcnew.customergroups', '', true);
+$customergroups = ConfigHelper::getConfig($config_section . '.customergroups', '', true);
 $customergroups = preg_split('/(\s+|\s*,\s*)/', $customergroups, -1, PREG_SPLIT_NO_EMPTY);
 if (empty($customergroups)) {
     $customerids = array();
 } else {
-    $customerids = $DB->GetRow("SELECT DISTINCT a.customerid FROM vcustomerassignments a
+    $customerids = $DB->GetCol("SELECT DISTINCT a.customerid FROM vcustomerassignments a
 		JOIN customergroups g ON g.id = a.customergroupid
 		WHERE UPPER(g.name) IN ('" . implode("','", array_map('mb_strtoupper', $customergroups)) . "')");
 }
@@ -341,10 +347,22 @@ foreach ($nodes as $node) {
     }
 
     list ($uprate, $downrate, $upceil, $downceil, $uprate_n, $downrate_n, $upceil_n, $downceil_n,
-        $climit, $plimit, $nodeid) =
-        array($node['uprate'], $node['downrate'], $node['upceil'], $node['downceil'],
-            $node['uprate_n'], $node['downrate_n'], $node['upceil_n'], $node['downceil_n'],
-            $node['climit'], $node['plimit'], $node['id']);
+        $climit, $plimit, $nodeid, $nodeip, $assignmentid) =
+        array(
+            $node['uprate'],
+            $node['downrate'],
+            $node['upceil'],
+            $node['downceil'],
+            $node['uprate_n'],
+            $node['downrate_n'],
+            $node['upceil_n'],
+            $node['downceil_n'],
+            $node['climit'],
+            $node['plimit'],
+            $node['id'],
+            $node['ip'],
+            $node['assignmentid']
+        );
 
     if (!$channelfound) { // channel (assignment) not found
         // mozliwe ze komputer jest juz przypisany do innego
@@ -401,18 +419,33 @@ foreach ($nodes as $node) {
         }
 
         // ...nie znaleziono komputera, tworzymy kanal
-        $channels[] = array('id' => $assignmentid, 'nodes' => array(), 'subs' => array(),
-            'cid' => $node['ownerid'], 'customer' => $node['customer'],
-            'uprate' => $uprate, 'upceil' => $upceil,
-            'downrate' => $downrate, 'downceil' => $downceil,
-            'uprate_n' => $uprate_n, 'upceil_n' => $upceil_n,
-            'downrate_n' => $downrate_n, 'downceil_n' => $downceil_n,
-            'climit' => $climit, 'plimit' => $plimit);
+        $channels[] = array(
+            'id' => $assignmentid,
+            'nodes' => array(),
+            'subs' => array(),
+            'cid' => $node['ownerid'],
+            'customer' => $node['customer'],
+            'uprate' => $uprate,
+            'upceil' => $upceil,
+            'downrate' => $downrate,
+            'downceil' => $downceil,
+            'uprate_n' => $uprate_n,
+            'upceil_n' => $upceil_n,
+            'downrate_n' => $downrate_n,
+            'downceil_n' => $downceil_n,
+            'climit' => $climit,
+            'plimit' => $plimit
+        );
         $j = count($channels) - 1;
     }
 
-    $channels[$j]['nodes'][] = array('id' => $nodeid, 'network' => $networkid, 'ip' => $ip,
-        'name' => $node['name'], 'mac' => $node['mac']);
+    $channels[$j]['nodes'][] = array(
+        'id' => $nodeid,
+        'network' => $networkid,
+        'ip' => $ip,
+        'name' => $node['name'],
+        'mac' => $node['mac']
+    );
 }
 
 if ($create_device_channels) {
@@ -423,16 +456,31 @@ if ($create_device_channels) {
 			AND n.netid IN (" . implode(',', array_keys($networks)) . ")");
 
     if (!empty($devices)) {
-        $channels[] = array('id' => '0', 'nodes' => array(), 'subs' => array(),
-            'cid' => '1', 'customer' => 'Devices', 'uprate' => '128', 'upceil' => '10000',
-            'downrate' => '128', 'downceil' => '10000',
-            'uprate_n' => '128', 'upceil_n' => '10000',
-            'downrate_n' => '128', 'downceil_n' => '10000',
-            'climit' => '0', 'plimit' => '0');
+        $channels[] = array(
+            'id' => '0',
+            'nodes' => array(),
+            'subs' => array(),
+            'cid' => '1',
+            'customer' => 'Devices',
+            'uprate' => '128',
+            'upceil' => '10000',
+            'downrate' => '128',
+            'downceil' => '10000',
+            'uprate_n' => '128',
+            'upceil_n' => '10000',
+            'downrate_n' => '128',
+            'downceil_n' => '10000',
+            'climit' => '0',
+            'plimit' => '0'
+        );
         foreach ($devices as $device) {
-            $channels[count($channels) - 1]['nodes'][] = array('id' => $device['id'],
-                'network' => $device['netid'], 'ip' => $device['ip'],
-                'name' => $device['name'], 'mac' => $device['mac']);
+            $channels[count($channels) - 1]['nodes'][] = array(
+                'id' => $device['id'],
+                'network' => $device['netid'],
+                'ip' => $device['ip'],
+                'name' => $device['name'],
+                'mac' => $device['mac']
+            );
         }
     }
 }
@@ -446,9 +494,15 @@ if (empty($fh) || empty($fh_d) || empty($fh_n)) {
     die;
 }
 
-fwrite($fh, preg_replace("/\\\\n/", "\n", $script_begin));
-fwrite($fh_d, preg_replace("/\\\\n/", "\n", $script_begin_day));
-fwrite($fh_n, preg_replace("/\\\\n/", "\n", $script_begin_night));
+$uts = time();
+$date = date('Y-m-d H:i', $uts);
+
+$from = array('\\n', '%date', '%uts');
+$to = array("\n", $date, $uts);
+
+fwrite($fh, str_replace($from, $to, $script_begin));
+fwrite($fh_d, str_replace($from, $to, $script_begin_day));
+fwrite($fh_n, str_replace($from, $to, $script_begin_night));
 
 $x = XVALUE;
 $mark = XVALUE;
@@ -473,24 +527,24 @@ foreach ($channels as $channel) {
     $downceil_n = (!$channel['downceil_n'] ? $downrate_n : $channel['downceil_n']);
 
     $from = array('\\n', '%cid', '%cname', '%h', '%class',
-        '%uprate', '%upceil', '%downrate', '%downceil');
+        '%uprate', '%upceil', '%downrate', '%downceil', '%date', '%uts');
 
     $to = array("\n", $channel['cid'], $channel['customer'], sprintf("%x", $x), sprintf("%d", $x),
-        $uprate, $upceil, $downrate, $downceil);
+        $uprate, $upceil, $downrate, $downceil, $date, $uts);
     $c_up = str_replace($from, $to, $c_up);
     $c_up_day = str_replace($from, $to, $c_up_day);
 
     $to = array("\n", $channel['cid'], $channel['customer'], sprintf("%x", $x), sprintf("%d", $x),
-        $uprate_n, $upceil_n, $downrate_n, $downceil_n);
+        $uprate_n, $upceil_n, $downrate_n, $downceil_n, $date, $uts);
     $c_up_night = str_replace($from, $to, $c_up_night);
 
     $to = array("\n", $channel['cid'], $channel['customer'], sprintf("%x", $x), sprintf("%d", $x),
-        $uprate, $upceil, $downrate, $downceil);
+        $uprate, $upceil, $downrate, $downceil, $date, $uts);
     $c_down = str_replace($from, $to, $c_down);
     $c_down_day = str_replace($from, $to, $c_down_day);
 
     $to = array("\n", $channel['cid'], $channel['customer'], sprintf("%x", $x), sprintf("%d", $x),
-        $uprate_n, $upceil_n, $downrate_n, $downceil_n);
+        $uprate_n, $upceil_n, $downrate_n, $downceil_n, $date, $uts);
     $c_down_night = str_replace($from, $to, $c_down_night);
 
     // ... and write to file
@@ -598,8 +652,10 @@ fclose($fh);
 fclose($fh_d);
 fclose($fh_n);
 
-chmod($script_file, intval($script_permission, 8));
-chmod($script_file_day, intval($script_permission, 8));
-chmod($script_file_night, intval($script_permission, 8));
+if ($script_permission != -1) {
+    chmod($script_file, intval($script_permission, 8));
+    chmod($script_file_day, intval($script_permission, 8));
+    chmod($script_file_night, intval($script_permission, 8));
+}
 
 ?>

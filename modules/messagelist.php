@@ -61,6 +61,20 @@ if (isset($_POST['status'])) {
 }
 $SESSION->save('mlst', $status);
 
+if (isset($_POST['datefrom'])) {
+    $datefrom = date_to_timestamp($_POST['datefrom']);
+} else {
+    $SESSION->restore('mldatefrom', $datefrom);
+}
+$SESSION->save('mldatefrom', $datefrom);
+
+if (isset($_POST['dateto'])) {
+    $dateto = date_to_timestamp($_POST['dateto']);
+} else {
+    $SESSION->restore('mldateto', $dateto);
+}
+$SESSION->save('mldateto', $dateto);
+
 if (!empty($_GET['cid'])) {
     $s = $_GET['cid'];
     $c = 'customerid';
@@ -73,12 +87,16 @@ $args = array(
     'cat' => $c,
     'type' => $t,
     'status' => $status,
+    'datefrom' => $datefrom,
+    'dateto' => empty($dateto) ? $dateto : strtotime('tomorrow', $dateto) - 1,
     'count' => true
 );
 
 if ($c == 'date') {
-    list ($y, $m, $d) = explode('/', $s);
-    $args['datefrom'] = mktime(0, 0, 0, $m, $d, $y);
+    $args['datefrom'] = strtotime($s);
+    if ($args['datefrom'] === false) {
+        $args['datefrom'] = strtotime('today');
+    }
     $args['dateto'] = strtotime('tomorrow', $args['datefrom']) - 1;
 }
 
@@ -104,6 +122,8 @@ $listdata['order'] = $messagelist['order'];
 $listdata['direction'] = $messagelist['direction'];
 $listdata['cat'] = $c;
 $listdata['search'] = $s;
+$listdata['datefrom'] = $datefrom;
+$listdata['dateto'] = $dateto;
 
 unset($messagelist['type']);
 unset($messagelist['status']);

@@ -309,15 +309,15 @@ if ($type == 'openlayers') {
 
     if (isset($_GET['netdevid'])) {
         $netdevid = intval($_GET['netdevid']);
-        $SMARTY->assign('lon', $devices[$netdevid]['lon']);
-        $SMARTY->assign('lat', $devices[$netdevid]['lat']);
+        $SMARTY->assign('lon', isset($devices[$netdevid]['lon']) ? $devices[$netdevid]['lon'] : null);
+        $SMARTY->assign('lat', isset($devices[$netdevid]['lat']) ? $devices[$netdevid]['lat'] : null);
     } else if (isset($_GET['nodeid'])) {
         $nodeid = intval($_GET['nodeid']);
-        $SMARTY->assign('lon', $nodes[$nodeid]['lon']);
-        $SMARTY->assign('lat', $nodes[$nodeid]['lat']);
+        $SMARTY->assign('lon', isset($nodes[$nodeid]['lon']) ? $nodes[$nodeid]['lon'] : null);
+        $SMARTY->assign('lat', isset($nodes[$nodeid]['lat']) ? $nodes[$nodeid]['lat'] : null);
     } else {
-        $SMARTY->assign('lon', $_GET['lon']);
-        $SMARTY->assign('lat', $_GET['lat']);
+        $SMARTY->assign('lon', isset($_GET['lon']) ? $_GET['lon'] : null);
+        $SMARTY->assign('lat', isset($_GET['lat']) ? $_GET['lat'] : null);
     }
 
     $SMARTY->assign('type', $type);

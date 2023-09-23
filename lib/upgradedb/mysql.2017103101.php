@@ -22,15 +22,23 @@
  */
 
 // Document types
-define('DOC_INVOICE', 1);
-define('DOC_CNOTE', 3);
-define('DOC_DNOTE', 5);
-define('DOC_INVOICE_PRO', 6);
+if (!defined('DOC_INVOICE')) {
+    define('DOC_INVOICE', 1);
+}
+if (!defined('DOC_CNOTE')) {
+    define('DOC_CNOTE', 3);
+}
+if (!defined('DOC_DNOTE')) {
+    define('DOC_DNOTE', 5);
+}
+if (!defined('DOC_INVOICE_PRO')) {
+    define('DOC_INVOICE_PRO', 6);
+}
 
 if (!defined('POSTAL_ADDRESS')) {
     define('POSTAL_ADDRESS', 0);
 }
-if (!defined('BILLING_ADDREESS')) {
+if (!defined('BILLING_ADDRESS')) {
     define('BILLING_ADDRESS', 1);
 }
 if (!defined('LOCATION_ADDRESS')) {

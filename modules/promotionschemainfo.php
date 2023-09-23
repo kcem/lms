@@ -52,7 +52,7 @@ foreach ($schema['data'] as $idx => $data) {
         // unlimited
         break;
     } else if ($data == 1) {
-        $period = trans('Month $a', $data);
+        $period = trans('Month $a', $mon);
         $mon++;
     } else {
         $period = trans('Months $a-$b', $mon, $mon + $data-1);
@@ -60,9 +60,19 @@ foreach ($schema['data'] as $idx => $data) {
     }
     $schema['periods'][] = $period;
 }
-$schema['periods'][] = trans('Months $a-', $mon);
+$schema['periods'][] = trans('Months $a-$b', $mon, '&hellip;');
 
 $schema['data'] = implode(' &raquo; ', (array)$schema['data']);
+
+$schema['attachments'] = $DB->GetAllByKey(
+    'SELECT *
+    FROM promotionattachments
+    WHERE promotionschemaid = ?',
+    'id',
+    array(
+        $_GET['id'],
+    )
+);
 
 $schema['tariffs'] = $DB->GetAll(
     'SELECT t.name, t.value, t.type,
@@ -112,9 +122,15 @@ $tariffs = $DB->GetAllByKey(
     (CASE WHEN t.flags & ' . TARIFF_FLAG_SPLIT_PAYMENT . ' > 0 THEN 1 ELSE 0 END) AS splitpayment
     FROM tariffs t
     LEFT JOIN tariffassignments ta ON ta.tariffid = t.id
-    WHERE t.disabled = 0 AND (t.flags & ' . TARIFF_FLAG_NET_ACCOUNT . ') = 0' . (ConfigHelper::checkConfig('phpui.promotion_tariff_duplicates') ? '' : ' AND t.id NOT IN (
-        SELECT tariffid FROM promotionassignments
-        WHERE promotionschemaid = ' . $schema['id'] . ')') . '
+    WHERE t.disabled = 0 AND (t.flags & ' . TARIFF_FLAG_NET_ACCOUNT . ') = 0'
+        . (ConfigHelper::checkConfig(
+            'promotions.tariff_duplicates',
+            ConfigHelper::checkConfig('phpui.promotion_tariff_duplicates')
+        )
+            ? ''
+            : ' AND t.id NOT IN (
+                SELECT tariffid FROM promotionassignments
+                WHERE promotionschemaid = ' . $schema['id'] . ')') . '
     GROUP BY t.id, t.name, t.value, splitpayment, t.authtype, datefrom, dateto, uprate, downrate, upceil, downceil, t.type
     ORDER BY t.name, t.value DESC',
     'id'

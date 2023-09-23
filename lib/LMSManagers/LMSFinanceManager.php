@@ -91,7 +91,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         static $assignmentPresentationFormat = null;
 
         if (!isset($assignmentPresentationFormat)) {
-            $assignmentPresentationFormat = ConfigHelper::getConfig('phpui.assignment_presentation_format', '%name');
+            $assignmentPresentationFormat = ConfigHelper::getConfig(
+                'assignments.presentation_format',
+                ConfigHelper::getConfig('phpui.assignment_presentation_format', '%name')
+            );
         }
 
         return str_replace(
@@ -159,7 +162,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             d.fullnumber,
             (CASE WHEN
                     ((a.period <> ' . DISPOSABLE . ' OR (a.tariffid IS NULL AND a.liabilityid IS NULL)) AND (a.dateto > ' . $now . ' OR a.dateto = 0) AND (a.at >= ' . $now . ' OR a.at < 531))
-                    OR (a.period = ' . DISPOSABLE . ' AND a.at > ' . $now . ')
+                    OR (a.period = ' . DISPOSABLE . ' AND a.at >= ' . $now . ')
                 THEN 0
                 ELSE 1
             END) AS expired,
@@ -194,7 +197,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         $row['payday'] = trans('daily');
                         break;
                     case WEEKLY:
-                        $row['at'] = strftime("%a", mktime(0, 0, 0, 0, $row['at'] + 5, 0));
+                        $row['at'] = date('D', mktime(0, 0, 0, 0, $row['at'] + 5, 0));
                         $row['payday'] = trans('weekly ($a)', $row['at']);
                         $row['period'] = trans('weekly');
                         break;
@@ -226,7 +229,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
                 $row['docnumber'] = docnumber(array(
                     'number' => $row['docnumber'],
-                    'template' => $row['numtemplate'],
+                    'template' => isset($row['numtemplate']) ? $row['numtemplate'] : null,
                     'cdate' => $row['cdate'],
                     'customerid' => $id,
                 ));
@@ -251,46 +254,66 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                                                                        WHERE
                                                                          assignment_id = ?', 'phone', array($row['id']));
 
+                if (!empty($row['tariffid'])) {
+                    $priceVariant = $lms->getTariffPriceVariantByQuantityThreshold($row['tariffid'], $row['count']);
+                    if (!empty($priceVariant)) {
+                        $row['netvalue'] = $priceVariant['net_price'] * $row['count'];
+                        $row['value'] = $priceVariant['gross_price'] * $row['count'];
+                        $row['unitary_netvalue'] = $priceVariant['net_price'];
+                        $row['unitary_value'] = $priceVariant['gross_price'];
+                        $assignments[$idx]['unitary_netvalue'] = $priceVariant['net_price'];
+                        $assignments[$idx]['unitary_value'] = $priceVariant['gross_price'];
+                        $assignments[$idx]['netvalue'] = $priceVariant['net_price'] * $row['count'];
+                        $assignments[$idx]['value'] = $priceVariant['gross_price'] * $row['count'];
+                    }
+                }
+
                 if ($assignments[$idx]['netflag']) {
-                    $assignments[$idx]['discounted_netprice'] = f_round(($row['unitary_netvalue'] - $row['unitary_netvalue'] * $row['pdiscount'] / 100) - ($row['unitary_vdiscount']));
+                    $assignments[$idx]['discounted_netprice'] = f_round(($row['unitary_netvalue'] - $row['unitary_netvalue'] * $row['pdiscount'] / 100) - ($row['unitary_vdiscount']), 3);
                     if ($row['suspended'] == 1) {
                         $assignments[$idx]['discounted_netprice'] = $assignments[$idx]['discounted_netprice'] * ConfigHelper::getConfig('finances.suspension_percentage') / 100;
                     }
                     $assignments[$idx]['discounted_netvalue'] = f_round($assignments[$idx]['discounted_netprice'] * $row['count']);
-                    $assignments[$idx]['unitary_netdiscount'] = f_round($row['unitary_netvalue'] - $assignments[$idx]['discounted_netprice']);
+                    $assignments[$idx]['unitary_netdiscount'] = f_round($row['unitary_netvalue'] - $assignments[$idx]['discounted_netprice'], 3);
 
-                    if ($assignments[$idx]['tax_value']) {
-                        $assignments[$idx]['discounted_price'] = f_round($assignments[$idx]['discounted_netprice'] * ($assignments[$idx]['tax_value'] / 100 + 1));
+                    if (!empty($assignments[$idx]['tax_value'])) {
+                        $assignments[$idx]['discounted_price'] = f_round($assignments[$idx]['discounted_netprice'] * ($assignments[$idx]['tax_value'] / 100 + 1), 3);
 
                         $assignments[$idx]['tax_from_discounted_value'] = f_round($assignments[$idx]['discounted_netvalue'] * ($assignments[$idx]['tax_value'] / 100));
-                    } elseif ($assignments[$idx]['taxl_value']) {
-                        $assignments[$idx]['discounted_price'] = f_round($assignments[$idx]['discounted_netprice'] * ($assignments[$idx]['taxl_value'] / 100 + 1));
+                    } elseif (!empty($assignments[$idx]['taxl_value'])) {
+                        $assignments[$idx]['discounted_price'] = f_round($assignments[$idx]['discounted_netprice'] * ($assignments[$idx]['taxl_value'] / 100 + 1), 3);
 
                         $assignments[$idx]['tax_from_discounted_value'] = f_round($assignments[$idx]['discounted_netvalue'] * ($assignments[$idx]['taxl_value'] / 100));
+                    } else {
+                        $assignments[$idx]['discounted_price'] = 0;
+                        $assignments[$idx]['tax_from_discounted_value'] = 0;
                     }
                     $assignments[$idx]['discounted_value'] = f_round(($assignments[$idx]['discounted_netvalue'] + $assignments[$idx]['tax_from_discounted_value']));
-                    $assignments[$idx]['unitary_discount'] = f_round($row['unitary_value'] - $assignments[$idx]['discounted_price']);
+                    $assignments[$idx]['unitary_discount'] = f_round($row['unitary_value'] - $assignments[$idx]['discounted_price'], 3);
                 } else {
-                    $assignments[$idx]['discounted_price'] = f_round(($row['unitary_value'] - $row['unitary_value'] * $row['pdiscount'] / 100) - ($row['unitary_vdiscount']));
+                    $assignments[$idx]['discounted_price'] = f_round(($row['unitary_value'] - $row['unitary_value'] * $row['pdiscount'] / 100) - ($row['unitary_vdiscount']), 3);
                     if ($row['suspended'] == 1) {
                         $assignments[$idx]['discounted_price'] = $assignments[$idx]['discounted_price'] * ConfigHelper::getConfig('finances.suspension_percentage') / 100;
                     }
                     $assignments[$idx]['discounted_value'] = f_round($assignments[$idx]['discounted_price'] * $row['count']);
-                    $assignments[$idx]['unitary_discount'] = f_round($row['unitary_value'] - $assignments[$idx]['discounted_price']);
+                    $assignments[$idx]['unitary_discount'] = f_round($row['unitary_value'] - $assignments[$idx]['discounted_price'], 3);
 
-                    if ($assignments[$idx]['tax_value']) {
-                        $assignments[$idx]['discounted_netprice'] = f_round($assignments[$idx]['discounted_price'] / ($assignments[$idx]['tax_value'] / 100 + 1));
+                    if (!empty($assignments[$idx]['tax_value'])) {
+                        $assignments[$idx]['discounted_netprice'] = f_round($assignments[$idx]['discounted_price'] / ($assignments[$idx]['tax_value'] / 100 + 1), 3);
 
                         $assignments[$idx]['tax_from_discounted_value'] = f_round(($assignments[$idx]['discounted_value'] * $assignments[$idx]['tax_value'])
                             / (100 + $assignments[$idx]['tax_value']));
-                    } elseif ($assignments[$idx]['taxl_value']) {
-                        $assignments[$idx]['discounted_netprice'] = f_round($assignments[$idx]['discounted_price'] / ($assignments[$idx]['taxl_value'] / 100 + 1));
+                    } elseif (!empty($assignments[$idx]['taxl_value'])) {
+                        $assignments[$idx]['discounted_netprice'] = f_round($assignments[$idx]['discounted_price'] / ($assignments[$idx]['taxl_value'] / 100 + 1), 3);
 
                         $assignments[$idx]['tax_from_discounted_value'] = f_round(($assignments[$idx]['discounted_value'] * $assignments[$idx]['taxl_value'])
                             / (100 + $assignments[$idx]['taxl_value']));
+                    } else {
+                        $assignments[$idx]['discounted_netprice'] = 0;
+                        $assignments[$idx]['tax_from_discounted_value'] = 0;
                     }
                     $assignments[$idx]['discounted_netvalue'] = f_round(($assignments[$idx]['discounted_value'] - $assignments[$idx]['tax_from_discounted_value']));
-                    $assignments[$idx]['unitary_netdiscount'] = f_round($row['unitary_netvalue'] - $assignments[$idx]['discounted_netprice']);
+                    $assignments[$idx]['unitary_netdiscount'] = f_round($row['unitary_netvalue'] - $assignments[$idx]['discounted_netprice'], 3);
                 }
 
                 $now = time();
@@ -306,8 +329,8 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     $assignments[$idx]['real_netvalue'] = $row['netvalue'];
                     $assignments[$idx]['real_unitary_discount'] = $assignments[$idx]['unitary_discount'];
                     $assignments[$idx]['real_unitary_netdiscount'] = $assignments[$idx]['unitary_netdiscount'];
-                    $assignments[$idx]['real_discount'] = round($assignments[$idx]['real_unitary_discount'] * $row['count'], 2);
-                    $assignments[$idx]['real_netdiscount'] = round($assignments[$idx]['real_unitary_netdiscount'] * $row['count'], 2);
+                    $assignments[$idx]['real_discount'] = round($assignments[$idx]['real_unitary_discount'] * $row['count'], 3);
+                    $assignments[$idx]['real_netdiscount'] = round($assignments[$idx]['real_unitary_netdiscount'] * $row['count'], 3);
                     $assignments[$idx]['real_disc_value'] = $assignments[$idx]['discounted_value'];
                     $assignments[$idx]['real_disc_netvalue'] = $assignments[$idx]['discounted_netvalue'];
                     $assignments[$idx]['real_unitary_downrate'] = $row['unitary_downrate'];
@@ -362,7 +385,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         if ($servicesassignments) {
             $total_value = 0;
             foreach ($servicesassignments as $idx => $row) {
-                $servicesassignments[$idx]['tarifftypename'] = $SERVICETYPES[$row['tarifftype']];
+                $servicesassignments[$idx]['tarifftypename'] = empty($row['tarifftype']) ? trans('undefined') : $SERVICETYPES[$row['tarifftype']];
                 $total_value += $row['sumvalue'];
             }
             $servicesassignments['total_value'] = $total_value;
@@ -419,11 +442,12 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
         $commited = (!isset($data['commited']) || $data['commited'] ? 1 : 0);
 
+        $now = strtotime('now');
+
         // Create assignments according to promotion schema
         if (!empty($data['promotionassignmentid']) && !empty($data['schemaid'])) {
-            $force_at_next_day = ConfigHelper::checkConfig('phpui.promotion_force_at_next_day');
-
-            $now = strtotime('now');
+            $force_at_next_day = ConfigHelper::checkConfig('promotions.force_at_next_day', ConfigHelper::checkConfig('phpui.promotion_force_at_next_day'));
+            $force_current_period_settlement_at_same_day = ConfigHelper::checkConfig('promotions.force_current_period_settlement_at_same_day');
 
             $align_periods = isset($data['align-periods']) && !empty($data['align-periods']);
 
@@ -445,19 +469,22 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             $orig_datefrom = $datefrom = $data['datefrom'];
             $cday        = date('d', $datefrom);
 
-            $use_discounts = ConfigHelper::checkConfig('phpui.promotion_use_discounts');
+            $use_discounts = ConfigHelper::checkConfig(
+                'promotions.use_discounts',
+                ConfigHelper::checkConfig('phpui.promotion_use_discounts')
+            );
 
             foreach ($data_tariff as $idx => $dt) {
                 list($value, $period) = explode(':', $dt);
 
                 if (isset($data['modifiedvalues'][$idx])) {
-                    $value = $data['modifiedvalues'][$idx];
+                    $value = str_replace(',', '.', $data['modifiedvalues'][$idx]);
                 }
 
                 // Activation
                 if (!$idx) {
                     // if activation value specified, create disposable liability
-                    if (f_round($value)) {
+                    if (f_round($value, 3)) {
                         $start_day   = date('d', $orig_datefrom);
                         $start_month = date('n', $orig_datefrom);
                         $start_year  = date('Y', $orig_datefrom);
@@ -465,10 +492,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         // sometimes we want to have activation issued in the last day
                         // of given month instead first day of next month
                         // to fullfill strange tax rules
-                        $activation_at_same_day = ConfigHelper::checkConfig('phpui.promotion_activation_at_same_day');
+                        $activation_at_same_day = ConfigHelper::checkConfig('promotions.activation_at_same_day', ConfigHelper::checkConfig('phpui.promotion_activation_at_same_day'));
                         // payday is before the start of the period
                         // set activation payday to next month's payday
-                        $activation_at_next_day = ConfigHelper::getConfig('phpui.promotion_activation_at_next_day', '', true);
+                        $activation_at_next_day = ConfigHelper::getConfig('promotions.activation_at_next_day', ConfigHelper::getConfig('phpui.promotion_activation_at_next_day', '', true));
                         if ($force_at_next_day) {
                             $datefrom = strtotime('tomorrow', $datefrom);
                             if ($activation_at_next_day == 'business') {
@@ -476,8 +503,12 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                             }
                             $at = $datefrom;
                         } elseif (ConfigHelper::checkValue($activation_at_next_day) || preg_match('/^(absolute|business)$/', $activation_at_next_day)) {
-                            if ($datefrom < $now && !$activation_at_same_day) {
-                                $datefrom = strtotime('tomorrow');
+                            if ($datefrom < $now) {
+                                if ($activation_at_same_day) {
+                                    $datefrom = strtotime('today');
+                                } else {
+                                    $datefrom = strtotime('tomorrow');
+                                }
                             }
                             if ($activation_at_next_day == 'business') {
                                 $datefrom = Utils::findNextBusinessDay($datefrom);
@@ -486,11 +517,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         } elseif (($data['at'] === 0 && $start_day >= date('j', mktime(12, 0, 0, $start_month + 1, 0, $start_year)))
                             || ($data['at'] > 0 && $start_day >= $data['at'])) {
                             $datefrom = mktime(0, 0, 0, $start_month + ($data['at'] === 0 ? 2 : 1), $data['at'], $start_year);
-                            if ($_datefrom > strtotime(date('Y/m/d')) && $start_day >= $data['at']) {
-                                $at = $_datefrom;
-                            } else {
-                                $at = $datefrom;
-                            }
+                            $at = $datefrom;
                         } elseif ($data['at'] === 0) {
                             $datefrom = mktime(0, 0, 0, $start_month + 1, 0, $start_year);
                             $at = $datefrom;
@@ -544,7 +571,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                                         array($tariff['id'])
                                     );
 
-                                    $netValue = f_round(($value / ($tariff['taxvalue'] / 100 + 1)));
+                                    $netValue = f_round(($value / ($tariff['taxvalue'] / 100 + 1)), 3);
 
                                     $args = array_merge($args, array(
                                         'name' => $tariff['name'],
@@ -582,7 +609,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                                 }
                             }
                         } else {
-                            $netValue = f_round(($value / ($tariff['taxvalue'] / 100 + 1)));
+                            $netValue = f_round(($value / ($tariff['taxvalue'] / 100 + 1)), 3);
                             $args = array(
                                 'name' => trans('Activation payment'),
                                 'value' => str_replace(',', '.', $value),
@@ -627,10 +654,12 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
                     $datefrom  = !empty($_datefrom) ? $_datefrom : $datefrom;
                     $_datefrom = 0;
-                    $at        = (ConfigHelper::checkValue(ConfigHelper::getConfig('phpui.promotion_preserve_at_day', true)) && $data['at'] !== '')
-                                               ? $data['at'] : $this->CalcAt($period, $datefrom);
+                    $at        = (ConfigHelper::checkConfig(
+                        'promotions.preserve_at_day',
+                        ConfigHelper::checkConfig('phpui.promotion_preserve_at_day', true)
+                    ) && $data['at'] !== '') ? $data['at'] : $this->CalcAt($period, $datefrom);
 
-                    $length    = $data_schema[$idx - 1];
+                    $length    = isset($data_schema[$idx - 1]) ? $data_schema[$idx - 1] : null;
                     $month     = date('n', $datefrom);
                     $year      = date('Y', $datefrom);
 
@@ -693,7 +722,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                                 array($tariff['id'])
                             );
 
-                            $netValue = f_round(($value / ($tariff['taxvalue'] / 100 + 1)));
+                            $netValue = f_round(($value / ($tariff['taxvalue'] / 100 + 1)), 3);
 
                             $args = array_merge($args, array(
                                 'name' => $tariff['name'],
@@ -763,14 +792,18 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         $diffdays = round(($partial_dateto - $orig_datefrom) / 86400);
                         if ($diffdays > 0) {
                             list ($y, $m) = explode('/', date('Y/m', $partial_dateto - 1));
-                            $month_days = strftime("%d", mktime(0, 0, 0, $m + 1, 0, $y));
+                            $month_days = date('d', mktime(0, 0, 0, $m + 1, 0, $y));
 
                             $partial_dateto--;
                             if (($data['at'] > 0 && $data['at'] >= $dom + 1) || ($data['at'] === 0 && $month_days >= $dom + 1)) {
                                 $partial_at = $data['at'];
                             } else {
-                                if ($force_at_next_day && $idx == 1) {
-                                    $partial_at = date('d', strtotime('tomorrow', $orig_datefrom));
+                                if ($idx == 1 && ($force_at_next_day || $force_current_period_settlement_at_same_day)) {
+                                    if ($force_current_period_settlement_at_same_day) {
+                                        $partial_at = $orig_datefrom <= $now ? date('d') : $dom;
+                                    } elseif ($force_at_next_day) {
+                                        $partial_at = date('d', strtotime('tomorrow', $orig_datefrom));
+                                    }
                                 } else {
                                     $partial_at = $orig_datefrom <= $now ? date('d', strtotime('tomorrow')) : $dom;
                                 }
@@ -778,7 +811,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
                             if ($value != 'NULL') {
                                 $v = $diffdays * $discounted_val / $month_days;
-                                $partial_vdiscount = str_replace(',', '.', round(abs($v - $val), 2));
+                                $partial_vdiscount = str_replace(',', '.', round(abs($v - $val), 3));
 
                                 $args = array(
                                     SYSLOG::RES_TARIFF => $tariffid,
@@ -791,6 +824,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                                     'separatedocument' => isset($data['separatedocument']) ? 1 : 0,
                                     'settlement' => 0,
                                     SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
+                                    'paytime' => !empty($data['paytime']) && $data['paytime'] != -1 ? $data['paytime'] : null,
                                     'paytype' => !empty($data['paytype']) ? $data['paytype'] : null,
                                     'datefrom' => $datefrom,
                                     'dateto' => $partial_dateto,
@@ -823,13 +857,13 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     }
                 }
 
-                if (!empty($lid) || $value != 'NULL') {
-                    $ending_period_date = 0;
+                $ending_period_date = 0;
 
-                    // creates assignment record for ending partial period
-                    if ($idx && $period == MONTHLY
-                        && (($idx == count($data_tariff) - 1 && isset($data['last-settlement']) && $align_periods && $data['dateto'] && $data['dateto'] > $dateto)
-                            || ($idx < count($data_tariff) - 1 && !$align_periods))) {
+                // creates assignment record for ending partial period
+                if ($idx && $period == MONTHLY
+                    && (($idx == count($data_tariff) - 1 && isset($data['last-settlement']) && $align_periods && $data['dateto'] && $data['dateto'] > $dateto)
+                        || ($idx < count($data_tariff) - 1 && !$align_periods))) {
+                    if (!empty($lid) || $value != 'NULL') {
                         $val = $value;
                         if ($tariff['period'] && $period != DISPOSABLE
                             && $tariff['period'] != $period) {
@@ -854,52 +888,57 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                             }
                         }
                         $discounted_val = $val;
+                    }
 
-                        if ($align_periods) {
-                            list ($year, $month, $dom) = explode('/', date('Y/m/d', $data['dateto']));
-                            $prevperiod = mktime(0, 0, 0, $month, 1, $year);
-                            $diffdays = sprintf("%d", ($data['dateto'] + 1 - $prevperiod) / 86400);
-                            $_dateto = $data['dateto'];
+                    if ($align_periods) {
+                        list ($year, $month, $dom) = explode('/', date('Y/m/d', $data['dateto']));
+                        $prevperiod = mktime(0, 0, 0, $month, 1, $year);
+                        $diffdays = sprintf("%d", ($data['dateto'] + 1 - $prevperiod) / 86400);
+                        $_dateto = $data['dateto'];
+                    } else {
+                        list ($year, $month, $dom) = explode('/', date('Y/m/d', $dateto + 1));
+                        $prevperiod = mktime(0, 0, 0, $month, 1, $year);
+                        $diffdays = $cday - 1;
+                        $_dateto = mktime(23, 59, 59, $month, $diffdays, $year);
+                    }
+
+                    if ($diffdays > 0) {
+                        $month_days = date('d', mktime(0, 0, 0, $month + 1, 0, $year));
+                        if (!empty($lid) || $value != 'NULL') {
+                            $v = $diffdays * $discounted_val / $month_days;
+                            $partial_vdiscount = str_replace(',', '.', round(abs($v - $val), 3));
+                        }
+                        $partial_datefrom = $prevperiod;
+                        if ($data['at'] > 0 && $data['at'] < $dom) {
+                            $partial_at = $data['at'];
                         } else {
-                            list ($year, $month, $dom) = explode('/', date('Y/m/d', $dateto + 1));
-                            $prevperiod = mktime(0, 0, 0, $month, 1, $year);
-                            $diffdays = $cday - 1;
-                            $_dateto = mktime(23, 59, 59, $month, $diffdays, $year);
+                            $partial_at = $dom - 1;
                         }
 
-                        if ($diffdays > 0) {
-                            $month_days = strftime("%d", mktime(0, 0, 0, $month + 1, 0, $year));
-                            $v = $diffdays * $discounted_val / $month_days;
-                            $partial_vdiscount = str_replace(',', '.', round(abs($v - $val), 2));
-                            $partial_datefrom = $prevperiod;
-                            if ($data['at'] > 0 && $data['at'] < $dom) {
-                                $partial_at = $data['at'];
-                            } else {
-                                $partial_at = $dom - 1;
-                            }
-
+                        if (!empty($lid) || $value != 'NULL') {
                             $args = array(
-                                SYSLOG::RES_TARIFF  => empty($data['tariffid']) ? null : $tariffid,
-                                SYSLOG::RES_CUST    => $data['customerid'],
-                                'period'            => $period,
-                                'backwardperiod'    => $data['backwardperiod'],
-                                'at'                => $align_periods ? $partial_at : $data['at'],
-                                'count'             => $data['count'],
-                                'invoice'           => isset($data['invoice']) ? intval($data['invoice']) : 0,
-                                'separatedocument'  => isset($data['separatedocument']) ? 1 : 0,
-                                'settlement'        => 0,
+                                SYSLOG::RES_TARIFF => empty($data['tariffid']) ? null : $tariffid,
+                                SYSLOG::RES_CUST => $data['customerid'],
+                                'period' => $period,
+                                'backwardperiod' => $data['backwardperiod'],
+                                'at' => $align_periods ? $partial_at : $data['at'],
+                                'count' => $data['count'],
+                                'invoice' => isset($data['invoice']) ? intval($data['invoice']) : 0,
+                                'separatedocument' => isset($data['separatedocument']) ? 1 : 0,
+                                'settlement' => 0,
                                 SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
-                                'paytype'           => !empty($data['paytype']) ? $data['paytype'] : null,
-                                'datefrom'          => $partial_datefrom,
-                                'dateto'            => $_dateto,
-                                'pdiscount'         => 0,
-                                'vdiscount'         => str_replace(',', '.', (($use_discounts ? $tariff['value'] - $val : 0) + $partial_vdiscount) * ($val < 0 ? -1 : 1)),
-                                'attribute'         => !empty($data['attribute']) ? $data['attribute'] : null,
-                                SYSLOG::RES_LIAB    => null,
+                                'paytime' => !empty($data['paytime']) && $data['paytime'] != -1 ? $data['paytime'] : null,
+                                'paytype' => !empty($data['paytype']) ? $data['paytype'] : null,
+                                'datefrom' => $partial_datefrom,
+                                'dateto' => $_dateto,
+                                'pdiscount' => 0,
+                                'vdiscount' => str_replace(',', '.', (($use_discounts ? $tariff['value'] - $val : 0) + $partial_vdiscount) * ($val < 0 ? -1 : 1)),
+                                'attribute' => !empty($data['attribute']) ? $data['attribute'] : null,
+                                SYSLOG::RES_LIAB => null,
                                 'recipient_address_id' => $data['recipient_address_id'] > 0 ? $data['recipient_address_id'] : null,
-                                'docid'             => empty($data['docid']) ? null : $data['docid'],
+                                'docid' => empty($data['docid']) ? null : $data['docid'],
                                 'promotionschemaid' => $data['schemaid'],
-                                'commited'          => $commited,
+                                'commited' => $commited,
                             );
 
                             $result[] = $data['assignmentid'] = $this->insertAssignment($args);
@@ -907,47 +946,49 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                             $this->insertNodeAssignments($data);
                             $this->insertPhoneAssignments($data);
                         }
-
-                        $ending_period_date = mktime(23, 59, 59, $month, 0, $year);
                     }
 
-                    $__datefrom = $idx ? $datefrom : 0;
-                    $__dateto = $idx && ($idx < count($data_tariff) - 1) ? $dateto : $ending_period_date;
-                    if (!$align_periods) {
-                         $dateto = $_dateto;
-                    }
+                    $ending_period_date = mktime(23, 59, 59, $month, 0, $year);
+                }
 
-                    if ($__datefrom < $__dateto || !$__dateto) {
-                        // creates assignment record for schema period
-                        $args = array(
-                            SYSLOG::RES_TARIFF => empty($tariffid) ? null : $tariffid,
-                            SYSLOG::RES_CUST => $data['customerid'],
-                            'period' => $period,
-                            'backwardperiod' => $data['backwardperiod'],
-                            'at' => $at,
-                            'count' => $data['count'],
-                            'invoice' => isset($data['invoice']) ? intval($data['invoice']) : 0,
-                            'separatedocument' => isset($data['separatedocument']) ? 1 : 0,
-                            'settlement' => isset($data['settlement']) && $data['settlement'] == 1 && ($idx == 1 || !$align_periods) ? 1 : 0,
-                            SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
-                            'paytype' => !empty($data['paytype']) ? $data['paytype'] : null,
-                            'datefrom' => $__datefrom,
-                            'dateto' => $__dateto,
-                            'pdiscount' => 0,
-                            'vdiscount' => str_replace(',', '.', (($use_discounts ? $tariff['value'] - $value : 0)) * ($val < 0 ? -1 : 1)),
-                            'attribute' => !empty($data['attribute']) ? $data['attribute'] : null,
-                            SYSLOG::RES_LIAB => empty($lid) ? null : $lid,
-                            'recipient_address_id' => $data['recipient_address_id'] > 0 ? $data['recipient_address_id'] : null,
-                            'docid' => empty($data['docid']) ? null : $data['docid'],
-                            'promotionschemaid' => $data['schemaid'],
-                            'commited' => $commited,
-                        );
+                $__datefrom = $idx ? $datefrom : 0;
+                $__dateto = $idx && ($idx < count($data_tariff) - 1) ? $dateto : $ending_period_date;
+                if (!$align_periods) {
+                     $dateto = isset($_dateto) ? $_dateto : 0;
+                }
 
-                        $result[] = $data['assignmentid'] = $this->insertAssignment($args);
+                if ((!empty($lid) || $value != 'NULL')
+                    && ($__datefrom < $__dateto || !$__dateto)) {
+                    // creates assignment record for schema period
+                    $args = array(
+                        SYSLOG::RES_TARIFF => empty($tariffid) ? null : $tariffid,
+                        SYSLOG::RES_CUST => $data['customerid'],
+                        'period' => $period,
+                        'backwardperiod' => $data['backwardperiod'],
+                        'at' => $at,
+                        'count' => $data['count'],
+                        'invoice' => isset($data['invoice']) ? intval($data['invoice']) : 0,
+                        'separatedocument' => isset($data['separatedocument']) ? 1 : 0,
+                        'settlement' => isset($data['settlement']) && $data['settlement'] == 1 && ($idx == 1 || !$align_periods) ? 1 : 0,
+                        SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
+                        'paytime' => !empty($data['paytime']) && $data['paytime'] != -1 ? $data['paytime'] : null,
+                        'paytype' => !empty($data['paytype']) ? $data['paytype'] : null,
+                        'datefrom' => $__datefrom,
+                        'dateto' => $__dateto,
+                        'pdiscount' => 0,
+                        'vdiscount' => str_replace(',', '.', (($use_discounts ? $tariff['value'] - $value : 0)) * (isset($val) && $val < 0 ? -1 : 1)),
+                        'attribute' => !empty($data['attribute']) ? $data['attribute'] : null,
+                        SYSLOG::RES_LIAB => empty($lid) ? null : $lid,
+                        'recipient_address_id' => $data['recipient_address_id'] > 0 ? $data['recipient_address_id'] : null,
+                        'docid' => empty($data['docid']) ? null : $data['docid'],
+                        'promotionschemaid' => $data['schemaid'],
+                        'commited' => $commited,
+                    );
 
-                        $this->insertNodeAssignments($data);
-                        $this->insertPhoneAssignments($data);
-                    }
+                    $result[] = $data['assignmentid'] = $this->insertAssignment($args);
+
+                    $this->insertNodeAssignments($data);
+                    $this->insertPhoneAssignments($data);
                 }
 
                 if ($idx) {
@@ -957,10 +998,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         } else {
             if ($data['period'] == MONTHLY && ((isset($data['settlement']) && $data['settlement'] == 2) || isset($data['last-settlement']))) {
                 if (empty($data['tariffid'])) {
-                    $val = $data['value'];
+                    $val = empty($data['netflag']) ? $data['value'] : $data['netvalue'];
                 } else {
-                    $tariff = $this->db->GetRow('SELECT value, period FROM tariffs WHERE id = ?', array($data['tariffid']));
-                    $val = $tariff['value'];
+                    $tariff = $this->db->GetRow('SELECT netvalue, value, period FROM tariffs WHERE id = ?', array($data['tariffid']));
+                    $val = empty($data['netflag']) ? $tariff['value'] : $tariff['netvalue'];
                     if ($tariff['period'] && $data['period'] != DISPOSABLE
                         && $tariff['period'] != $data['period']) {
                         if ($tariff['period'] == YEARLY) {
@@ -998,17 +1039,23 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 list ($year, $month, $dom) = explode('/', date('Y/m/d', $data['datefrom']));
                 $nextperiod = mktime(0, 0, 0, $month + 1, 1, $year);
                 $partial_dateto = !empty($data['dateto']) && $nextperiod > $data['dateto'] ? $data['dateto'] + 1: $nextperiod;
-                $diffdays = ($partial_dateto - $data['datefrom']) / 86400;
+                $diffdays = round(($partial_dateto - $data['datefrom']) / 86400);
                 if ($diffdays > 0) {
                     list ($y, $m) = explode('/', date('Y/m', $partial_dateto - 1));
-                    $month_days = strftime("%d", mktime(0, 0, 0, $m + 1, 0, $y));
+                    $month_days = date('d', mktime(0, 0, 0, $m + 1, 0, $y));
                     $value = $diffdays * $discounted_val / $month_days;
-                    $partial_vdiscount = str_replace(',', '.', round(abs($value - $val), 2));
+                    $partial_vdiscount = str_replace(',', '.', round(abs($value - $val), 3));
                     $partial_dateto--;
+
                     if (($data['at'] > 0 && $data['at'] >= $dom + 1) || ($data['at'] === 0 && $month_days >= $dom + 1)) {
                         $partial_at = $data['at'];
                     } else {
-                        $partial_at = $dom + 1;
+                        $force_current_period_settlement_at_same_day = ConfigHelper::checkConfig('assignments.force_current_period_settlement_at_same_day');
+                        if ($force_current_period_settlement_at_same_day) {
+                            $partial_at = $data['datefrom'] <= $now ? date('d', $now) : $dom;
+                        } else {
+                            $partial_at = $data['datefrom'] <= $now ? date('d', strtotime('tomorrow')) : $dom + 1;
+                        }
                     }
 
                     if (empty($data['tariffid'])) {
@@ -1049,6 +1096,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         'separatedocument'  => isset($data['separatedocument']) ? 1 : 0,
                         'settlement'        => 0,
                         SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
+                        'paytime'           => !empty($data['paytime']) && $data['paytime'] != -1 ? $data['paytime'] : null,
                         'paytype'           => !empty($data['paytype']) ? $data['paytype'] : null,
                         'datefrom'          => $data['datefrom'],
                         'dateto'            => $partial_dateto,
@@ -1075,11 +1123,11 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             if ($data['dateto'] && $data['datefrom'] < $data['dateto'] && isset($data['last-settlement']) && $data['period'] == MONTHLY) {
                 list ($year, $month, $dom) = explode('/', date('Y/m/d', $data['dateto']));
                 $prevperiod = mktime(0, 0, 0, $month, 1, $year);
-                $diffdays = sprintf("%d", ($data['dateto'] + 1 - $prevperiod) / 86400);
+                $diffdays = round(($data['dateto'] + 1 - $prevperiod) / 86400);
                 if ($diffdays > 0) {
-                    $month_days = strftime("%d", mktime(0, 0, 0, $month + 1, 0, $year));
+                    $month_days = date('d', mktime(0, 0, 0, $month + 1, 0, $year));
                     $value = $diffdays * $discounted_val / $month_days;
-                    $partial_vdiscount = str_replace(',', '.', round(abs($value - $val), 2));
+                    $partial_vdiscount = str_replace(',', '.', round(abs($value - $val), 3));
                     $partial_datefrom = $prevperiod;
                     if ($data['at'] > 0 && $data['at'] < $dom) {
                         $partial_at = $data['at'];
@@ -1127,6 +1175,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         'separatedocument'  => isset($data['separatedocument']) ? 1 : 0,
                         'settlement'        => 0,
                         SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
+                        'paytime'           => !empty($data['paytime']) && $data['paytime'] != -1 ? $data['paytime'] : null,
                         'paytype'           => !empty($data['paytype']) ? $data['paytype'] : null,
                         'datefrom'          => $partial_datefrom,
                         'dateto'            => $data['dateto'],
@@ -1189,6 +1238,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     'separatedocument' => isset($data['separatedocument']) ? 1 : 0,
                     'settlement' => !isset($data['settlement']) || $data['settlement'] != 1 ? 0 : 1,
                     SYSLOG::RES_NUMPLAN => !empty($data['numberplanid']) ? $data['numberplanid'] : null,
+                    'paytime' => !empty($data['paytime']) && $data['paytime'] != -1 ? $data['paytime'] : null,
                     'paytype' => !empty($data['paytype']) ? $data['paytype'] : null,
                     'datefrom' => $data['datefrom'],
                     'dateto' => $data['dateto'],
@@ -1224,9 +1274,9 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             'INSERT INTO assignments
                 (tariffid, customerid, period, backwardperiod, at, count, invoice, separatedocument,
                 settlement, numberplanid,
-                paytype, datefrom, dateto, pdiscount, vdiscount, attribute, liabilityid, recipient_address_id,
+                paytime, paytype, datefrom, dateto, pdiscount, vdiscount, attribute, liabilityid, recipient_address_id,
                 docid, promotionschemaid, commited)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             array_values($args)
         );
 
@@ -1254,13 +1304,13 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             if ($this->syslog) {
                 $nodeassigns = $this->db->GetAll('SELECT id, nodeid FROM nodeassignments WHERE assignmentid = ?', array($args['assignmentid']));
                 foreach ($nodeassigns as $nodeassign) {
-                    $args = array(
+                    $args2 = array(
                         SYSLOG::RES_NODEASSIGN => $nodeassign['id'],
                         SYSLOG::RES_CUST => $args['customerid'],
                         SYSLOG::RES_NODE => $nodeassign['nodeid'],
                         SYSLOG::RES_ASSIGN => $args['assignmentid'],
                     );
-                    $this->syslog->AddMessage(SYSLOG::RES_NODEASSIGN, SYSLOG::OPER_ADD, $args);
+                    $this->syslog->AddMessage(SYSLOG::RES_NODEASSIGN, SYSLOG::OPER_ADD, $args2);
                 }
             }
         }
@@ -1304,7 +1354,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 $at = sprintf('%d', $a['at']);
 
                 if (ConfigHelper::checkConfig('phpui.use_current_payday') && $at == 0) {
-                    $at = strftime('%u', time());
+                    $at = date('N', time());
                 }
 
                 if ($at < 1 || $at > 7) {
@@ -1428,6 +1478,16 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             }
         }
 
+        if (isset($a['paytime'])) {
+            if (empty($a['paytime'])) {
+                $paytime = 0;
+            } elseif (preg_match('/^[\-]?[0-9]+$/', $a['paytime'])) {
+                $paytime = intval($a['paytime']);
+            } else {
+                $error['paytime'] = trans('Invalid deadline format!');
+            }
+        }
+
         if (isset($a['datefrom'])) {
             if (empty($a['datefrom'])) {
                 $from = 0;
@@ -1488,7 +1548,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     $schemaid = isset($a['schemaid']) ? intval($a['schemaid']) : 0;
                     $a['promotionassignmentid'] = $a['sassignmentid'][$schemaid];
 
-                    $values = $a['values'][$schemaid];
+                    $values = isset($a['values'][$schemaid]) ? $a['values'][$schemaid] : array();
                     $counts = $a['counts'][$schemaid];
                     foreach ($a['promotionassignmentid'] as $label => $tariffid) {
                         if (empty($tariffid)) {
@@ -1496,7 +1556,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         }
                         if (isset($values[$label][$tariffid])) {
                             foreach ($values[$label][$tariffid] as $period_idx => $value) {
-                                if (!preg_match('/^[0-9]+(\.[0-9]{1,2})?$/', $value)) {
+                                if (!preg_match('/^[0-9]+([.,][0-9]{1,3})?$/', $value)) {
                                     $error['value-' . $schemaid . '-'
                                     . iconv('UTF-8', 'ASCII//TRANSLIT', preg_replace('/[ _]/', '-', $label))
                                     . '-' . $tariffid . '-' . $period_idx] = trans('Incorrect value!');
@@ -1529,13 +1589,13 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         $error['name'] = trans('Liability name is required!');
                     }
 
-                    if (!$a['value'] && !$a['netflag']) {
+                    if (!$a['value'] && empty($a['netflag'])) {
                         $error['value'] = trans('Liability value is required!');
-                    } elseif (!$a['netvalue'] && $a['netflag']) {
+                    } elseif (!$a['netvalue'] && !empty($a['netflag'])) {
                         $error['netvalue'] = trans('Liability value is required!');
-                    } elseif (!preg_match('/^[-]?[0-9.,]+$/', $a['value']) && !$a['netflag']) {
+                    } elseif (!preg_match('/^[-]?[0-9.,]+$/', $a['value']) && empty($a['netflag'])) {
                         $error['value'] = trans('Incorrect value!');
-                    } elseif (!preg_match('/^[-]?[0-9.,]+$/', $a['netvalue']) && $a['netflag']) {
+                    } elseif (!preg_match('/^[-]?[0-9.,]+$/', $a['netvalue']) && !empty($a['netflag'])) {
                         $error['netvalue'] = trans('Incorrect value!');
                     } elseif ($a['discount_type'] == 2 && $a['discount'] && $a['value'] - $a['discount'] < 0) {
                         $error['value'] = trans('Value less than discount are not allowed!');
@@ -1573,21 +1633,33 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         $result['error'] = $error;
 
         $result['a'] = $a;
-        $result = array_merge($result, compact('period', 'at', 'from', 'to', 'schemaid', 'count'));
+        if (!isset($schemaid)) {
+            $schemaid = null;
+        }
+        $result = array_merge($result, compact('period', 'at', 'from', 'to', 'schemaid', 'count', 'paytime'));
 
         return $result;
     }
 
-    public function CheckSchemaModifiedValues($data)
+    public function CheckSchemaModifiedValues(&$data)
     {
-        if (ConfigHelper::checkConfig('phpui.promotion_allow_modify_values_for_privileged_user')
+        $schemaid = $data['schemaid'];
+        $sassignments = $data['sassignmentid'][$schemaid];
+        $values = isset($data['values'][$schemaid]) ? $data['values'][$schemaid] : null;
+
+        if (is_array($values)) {
+            foreach ($values as $label => $assignments) {
+                foreach ($assignments as $assignmentid => $periods) {
+                    $data['values'][$schemaid][$label][$assignmentid] = str_replace(',', '.', $values[$label][$assignmentid]);
+                }
+            }
+            $values = $data['values'][$schemaid];
+        }
+
+        if (ConfigHelper::checkConfig('promotions.allow_modify_values_for_privileged_user', ConfigHelper::checkConfig('phpui.promotion_allow_modify_values_for_privileged_user'))
             && ConfigHelper::checkPrivilege('promotion_management')) {
             return true;
         }
-
-        $schemaid = $data['schemaid'];
-        $sassignments = $data['sassignmentid'][$schemaid];
-        $values = $data['values'][$schemaid];
 
         if (is_array($values)) {
             foreach ($values as $label => &$assignments) {
@@ -1919,7 +1991,9 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         foreach (array_keys($DOCENTITIES) as $type) {
             if ($which & $type) {
                 $data['type'] = $type;
-                $data['duplicate-date'] = $doc['duplicate-date'];
+                if ($type == DOC_ENTITY_DUPLICATE) {
+                    $data['duplicate-date'] = isset($doc['duplicate-date']) ? $doc['duplicate-date'] : time();
+                }
                 $document->Draw($data);
                 $idx++;
                 if ($idx < $count) {
@@ -1998,11 +2072,13 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     $where = ' AND d.number = '.intval($search);
                     break;
                 case 'cdate':
-                    $where = ' AND d.cdate >= '.intval($search).' AND d.cdate < '.(intval($search)+86400);
+                    $where = ' AND d.cdate >= ' . intval($search) . ' AND d.cdate < ' . strtotime('tomorrow', intval($search));
                     break;
                 case 'month':
-                    $last = mktime(23, 59, 59, date('n', $search) + 1, 0, date('Y', $search));
-                    $where = ' AND d.cdate >= '.intval($search).' AND d.cdate <= '.$last;
+                    $where = ' AND d.cdate >= ' . intval($search) . ' AND d.cdate < ' . strtotime('+1 month', $search);
+                    break;
+                case 'year':
+                    $where = ' AND d.cdate >= ' . intval($search) . ' AND d.cdate < ' . strtotime('+1 year', $search);
                     break;
                 case 'ten':
                     $where = ' AND d.ten = ' . $this->db->Escape($search);
@@ -2040,7 +2116,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             return $this->db->GetOne('SELECT COUNT(DISTINCT id) FROM (SELECT d.id
                 FROM documents d'
                 . ($join_cash ?
-                    'JOIN invoicecontents a ON (a.docid = d.id)
+                    ' JOIN invoicecontents a ON (a.docid = d.id)
                     LEFT JOIN cash ON cash.docid = d.id AND cash.itemid = a.itemid'
                     : '') . '
                 LEFT JOIN (
@@ -2062,6 +2138,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 . (!empty($relatedentity) ? ' AND d.flags & ' . DOC_FLAG_RELATED_ENTITY . ' > 0' : '')
                 . (!empty($numberplan) ? ' AND d.numberplanid IN (' . implode(',', $numberplan) . ')' : '')
                 . (!empty($division) ? ' AND d.divisionid = ' . intval($division) : '')
+                . ' GROUP BY d.id'
                 . (isset($having) ? $having : '') . ') a');
         }
 
@@ -2078,7 +2155,8 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 			d.currency, d.currencyvalue,
 			COUNT(a.docid) AS count,
 			i.sendinvoices,
-			(CASE WHEN d2.id IS NULL THEN 0 ELSE 1 END) AS referenced
+			(CASE WHEN EXISTS (SELECT 1 FROM documents d2 WHERE d2.reference = d.id AND d2.type > 0) THEN 1 ELSE 0 END) AS referenced,
+			(CASE WHEN EXISTS (SELECT 1 FROM documents d3 WHERE d3.reference = d.id AND d3.type < 0) THEN 1 ELSE 0 END) AS documentreferenced
 			FROM documents d
 			JOIN vinvoicecontents a ON (a.docid = d.id)
 			LEFT JOIN cash ON cash.docid = d.id AND a.itemid = cash.itemid
@@ -2120,6 +2198,17 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             . (isset($limit) ? ' LIMIT ' . $limit : '')
             . (isset($offset) ? ' OFFSET ' . $offset : ''));
 
+        if (!empty($invoicelist)) {
+            foreach ($invoicelist as &$invoice) {
+                if (!empty($invoice['documentreferenced'])) {
+                    if (!isset($document_manager)) {
+                        $document_manager = new LMSDocumentManager($this->db, $this->auth, $this->cache, $this->syslog);
+                    }
+                    $invoice['refdocs'] = $document_manager->getDocumentReferences($invoice['id']);
+                }
+            }
+        }
+
         $invoicelist['order'] = $order;
         $invoicelist['direction'] = $direction;
 
@@ -2147,7 +2236,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
         $location_manager = new LMSLocationManager($this->db, $this->auth, $this->cache, $this->syslog);
 
-        if ($invoice['invoice']['recipient_address_id'] > 0) {
+        if (!empty($invoice['invoice']['recipient_address_id']) && $invoice['invoice']['recipient_address_id'] > 0) {
             $invoice['invoice']['recipient_address_id'] = $location_manager->CopyAddress($invoice['invoice']['recipient_address_id']);
         } else {
             $invoice['invoice']['recipient_address_id'] = null;
@@ -2161,7 +2250,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
         $invoice['invoice']['post_address_id'] = $location_manager->CopyAddress($post_address_id);
 
-        $doc_comment = $invoice['invoice']['comment'];
+        $doc_comment = isset($invoice['invoice']['comment']) ? $invoice['invoice']['comment'] : '';
         if (isset($invoice['invoice']['proformanumber']) && $invoice['invoice']['type'] == DOC_INVOICE) {
             $comment = ConfigHelper::getConfig('invoices.proforma_conversion_comment_format', '%comment');
             $comment = str_replace(
@@ -2291,7 +2380,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     'comment' => $item['name'],
                     'docid' => $iid,
                     'itemid' => $itemid,
-                    'servicetype' => $item['servicetype'],
+                    'servicetype' => isset($item['servicetype']) ? $item['servicetype'] : null,
                 ));
             }
         }
@@ -2438,7 +2527,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 				a.name as rec_name, a.address AS rec_address,
 				a.house AS rec_house, a.flat AS rec_flat, a.country_id AS rec_country_id,
 				c.pin AS customerpin, c.divisionid AS current_divisionid,
-				c.street, c.building, c.apartment,
+				c.street, c.building, c.apartment, c.type AS customertype,
 				(CASE WHEN d.post_address_id IS NULL THEN c.post_street ELSE a2.street END) AS post_street,
 				(CASE WHEN d.post_address_id IS NULL THEN c.post_building ELSE a2.house END) AS post_building,
 				(CASE WHEN d.post_address_id IS NULL THEN c.post_apartment ELSE a2.flat END) AS post_apartment,
@@ -2477,11 +2566,11 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     DOC_INVOICE_PRO
                 )
             );
-
-            $result['export'] = $result['division_countryid'] && $result['countryid'] && $result['division_countryid'] != $result['countryid'];
         }
 
         if ($result) {
+            $result['export'] = $result['division_countryid'] && $result['countryid'] && $result['division_countryid'] != $result['countryid'];
+
             $result['name'] = trim($result['name']);
 
             if ($detail_level == self::INVOICE_CONTENT_DETAIL_ALL && !empty($result['recipient_address_id'])) {
@@ -2543,7 +2632,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 DOC_FLAG_RELATED_ENTITY => ($result['flags'] & DOC_FLAG_RELATED_ENTITY) ? 1 : 0,
             );
 
-            if ($result['reference'] && $result['type'] != DOC_INVOICE_PRO && !$nested_flag) {
+            if ($result['reference'] && $result['doctype'] != DOC_INVOICE_PRO && !$nested_flag) {
                 $result['invoice'] = $this->GetInvoiceContent($result['reference'], $detail_level);
                 if (isset($result['invoice']['invoice'])) {
                     // replace pointed correction note number to previous one in invoice chain
@@ -2642,8 +2731,8 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 $customer_manager = new LMSCustomerManager($this->db, $this->auth, $this->cache, $this->syslog);
                 $result['customerbalance'] = $customer_manager->GetCustomerBalance($result['customerid'], $result['cdate'] + 1);
                 // NOTE: don't waste CPU/mem when printing history is not set:
-                if (ConfigHelper::checkValue(ConfigHelper::getConfig('invoices.print_balance_history', false))) {
-                    if (ConfigHelper::checkValue(ConfigHelper::getConfig('invoices.print_balance_history_save', false))) {
+                if (ConfigHelper::checkConfig('invoices.print_balance_history')) {
+                    if (ConfigHelper::checkConfig('invoices.print_balance_history_save')) {
                         $result['customerbalancelist'] = $customer_manager->GetCustomerBalanceList($result['customerid'], $result['cdate']);
                     } else {
                         $result['customerbalancelist'] = $customer_manager->GetCustomerBalanceList($result['customerid']);
@@ -2652,7 +2741,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 }
 
                 $default_author = ConfigHelper::getConfig('invoices.default_author', 'user_issuer,user_name,division_author');
-                $default_author = preg_split('/([\s]+|[\s]*,[\s]*)/', trim($default_author), -1, PREG_SPLIT_NO_EMPTY);
+                $default_author = preg_split('/[\s]*,[\s]*/', trim($default_author), -1, PREG_SPLIT_NO_EMPTY);
                 $expositor = trans('system');
                 foreach ($default_author as $author) {
                     switch ($author) {
@@ -2683,7 +2772,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 $result['expositor'] = $expositor;
             }
 
-            $result['paytypename'] = $PAYTYPES[$result['paytype']];
+            $result['paytypename'] = $PAYTYPES[$result['paytype']]['label'];
 
             // for backward compat.
             $result['totalg'] = round(($result['value'] - floor($result['value'])) * 100);
@@ -2865,11 +2954,11 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function GetNoteContent($id)
     {
-        global $LMS;
+        global $LMS, $PAYTYPES;
 
-        if ($result = $this->db->GetRow('SELECT d.id, d.number, d.name, d.customerid,
+        if ($result = $this->db->GetRow('SELECT d.id, d.type AS doctype, d.number, d.name, d.customerid,
                 d.userid, d.address, d.zip, d.city, d.countryid, cn.name AS country,
-				d.ten, d.ssn, d.cdate, d.numberplanid, d.closed, d.cancelled, d.published, d.archived, d.divisionid, d.paytime,
+				d.ten, d.ssn, d.cdate, d.numberplanid, d.closed, d.cancelled, d.published, d.archived, d.divisionid, d.paytime, d.paytype,
 				u.name AS user, u.issuer, n.template,
 				d.div_name AS division_name, d.div_shortname AS division_shortname,
 				d.div_address AS division_address, d.div_zip AS division_zip,
@@ -2907,6 +2996,8 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 				LEFT JOIN vaddresses a2 ON a2.id = d.post_address_id
 				LEFT JOIN countries cp ON (d.post_address_id IS NOT NULL AND cp.id = a2.country_id) OR (d.post_address_id IS NULL AND cp.id = c.post_countryid)
 				WHERE d.id = ? AND d.type = ?', array($id, DOC_DNOTE))) {
+            $result['export'] = $result['division_countryid'] && $result['countryid'] && $result['division_countryid'] != $result['countryid'];
+
             $result['bankaccounts'] = $this->db->GetCol(
                 'SELECT contact FROM customercontacts
 				WHERE customerid = ? AND (type & ?) = ?',
@@ -2940,12 +3031,15 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 }
             }
 
+            $result['paytypename'] = $PAYTYPES[empty($result['paytype']) ? PAYTYPE_TRANSFER : $result['paytype']]['label'];
+
             $result['valuep'] = round(($result['value'] - floor($result['value'])) * 100);
             $result['pdate'] = $result['cdate'] + ($result['paytime'] * 86400);
+            $result['total'] = $result['value'];
 
             // NOTE: don't waste CPU/mem when printing history is not set:
-            if (ConfigHelper::checkValue(ConfigHelper::getConfig('notes.print_balance', false))) {
-                if (ConfigHelper::checkValue(ConfigHelper::getConfig('notes.print_balance_history', false))) {
+            if (ConfigHelper::checkConfig('notes.print_balance')) {
+                if (ConfigHelper::checkConfig('notes.print_balance_history')) {
                     $result['customerbalancelist'] = $LMS->GetCustomerBalanceList($result['customerid'], $result['cdate']);
                 } else {
                     $result['customerbalancelist'] = $LMS->GetCustomerBalanceList($result['customerid']);
@@ -2963,6 +3057,40 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     $result['serviceaddr'] .= "\n" . $result['post_zip'] . ' ' . $result['post_city'];
                 }
             }
+
+            $customer_manager = new LMSCustomerManager($this->db, $this->auth, $this->cache, $this->syslog);
+            $result['customerbalance'] = $customer_manager->GetCustomerBalance($result['customerid'], $result['cdate'] + 1);
+
+            $default_author = ConfigHelper::getConfig('notes.default_author', 'user_issuer,user_name,division_author');
+            $default_author = preg_split('/[\s]*,[\s]*/', trim($default_author), -1, PREG_SPLIT_NO_EMPTY);
+            $expositor = trans('system');
+            foreach ($default_author as $author) {
+                switch ($author) {
+                    case 'user_issuer':
+                        if (!empty($result['issuer'])) {
+                            $expositor = $result['issuer'];
+                            break 2;
+                        }
+                        break;
+                    case 'user_name':
+                        if (!empty($result['user'])) {
+                            $expositor = $result['user'];
+                            break 2;
+                        }
+                        break;
+                    case 'division_author':
+                        if (!empty($result['division_author'])) {
+                            $expositor = $result['division_author'];
+                            break 2;
+                        }
+                        break;
+                    default:
+                        $expositor = $author;
+                        break 2;
+                }
+            }
+
+            $result['expositor'] = $expositor;
 
             $result['disable_protection'] = ConfigHelper::checkConfig('notes.disable_protection');
             $result['protection_password'] = ConfigHelper::getConfig('notes.protection_password');
@@ -3061,7 +3189,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             $id = $this->db->GetLastInsertID('tariffs');
 
             $tarifftag_manager = new LMSTariffTagManager($this->db, $this->auth, $this->cache, $this->syslog);
-            $tarifftag_manager->updateTariffTagsForTariff($id, $tariff['tags']);
+            $tarifftag_manager->updateTariffTagsForTariff($id, isset($tariff['tags']) ? $tariff['tags'] : null);
 
             if ($this->syslog) {
                 $args[SYSLOG::RES_TARIFF] = $id;
@@ -3167,7 +3295,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         }
 
         $tarifftag_manager = new LMSTariffTagManager($this->db, $this->auth, $this->cache, $this->syslog);
-        $tarifftag_manager->updateTariffTagsForTariff($tariff['id'], $tariff['tags']);
+        $tarifftag_manager->updateTariffTagsForTariff($tariff['id'], isset($tariff['tags']) ? $tariff['tags'] : null);
 
         return $res;
     }
@@ -3239,6 +3367,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
         $tarifftag_manager = new LMSTariffTagManager($this->db, $this->auth, $this->cache, $this->syslog);
         $result['tags'] = $tarifftag_manager->getTariffTagsForTariff($id);
+
+        $tariffPriceVariant_manager = new LMSTariffPriceVariantManager($this->db, $this->auth, $this->cache, $this->syslog);
+        $priceVariants = $tariffPriceVariant_manager->getTariffPriceVariants($id);
+        $result['price_variants'] = !empty($priceVariants) ? $priceVariants : array();
 
         $flags = array();
         if (!empty($result['flags'])) {
@@ -3332,7 +3464,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function GetTariffs($forced_id = null)
     {
-        return $this->db->GetAllByKey(
+        $tariffs = $this->db->GetAllByKey(
             'SELECT t.id, t.name, t.value,
             (CASE WHEN t.flags & ? > 0 THEN 1 ELSE 0 END) AS splitpayment,
             (CASE WHEN t.flags & ? > 0 THEN 1 ELSE 0 END) AS netflag,
@@ -3343,6 +3475,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             taxes.label AS tax, t.period, t.type AS tarifftype, ' . $this->db->GroupConcat('ta.tarifftagid') . ' AS tags
             FROM tariffs t
             LEFT JOIN tariffassignments ta ON ta.tariffid = t.id
+            LEFT JOIN tariffpricevariants tpv ON tpv.tariffid = t.id
             LEFT JOIN taxes ON t.taxid = taxes.id
             WHERE t.disabled = 0' . (empty($forced_id) ? '' : ' OR t.id = ' . intval($forced_id)) . '
             GROUP BY t.id, t.name, t.value, t.taxcategory, t.currency, uprate, taxid, t.authtype, datefrom, dateto, prodid, downrate, upceil, downceil, climit, plimit,
@@ -3354,6 +3487,16 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 TARIFF_FLAG_NET_ACCOUNT,
             )
         );
+
+        if (!empty($tariffs)) {
+            $lms = LMS::getInstance();
+            foreach ($tariffs as $tariffid => $tariff) {
+                $priceVariants = $lms->getTariffPriceVariants($tariffid);
+                $tariffs[$tariffid]['price_variants'] = !empty($priceVariants) ? $priceVariants : array();
+            }
+        }
+
+        return $tariffs;
     }
 
     public function TariffSet($id)
@@ -3524,10 +3667,13 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     $where = ' AND documents.number = '.intval($search);
                     break;
                 case 'cdate':
-                    $where = ' AND cash.time >= '.intval($search).' AND cash.time < '.(intval($search)+86400);
+                    $where = ' AND cash.time >= ' . intval($search) . ' AND cash.time < ' . strtotime('tomorrow', intval($search));
                     break;
                 case 'month':
                     $where = ' AND cash.time >= ' . intval($search) . ' AND cash.time < ' . strtotime('+1 month', $search);
+                    break;
+                case 'year':
+                    $where = ' AND cash.time >= ' . intval($search) . ' AND cash.time < ' . strtotime('+1 year', $search);
                     break;
                 case 'ten':
                     $where = ' AND c.ten = ' . $this->db->Escape($search);
@@ -3647,6 +3793,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function AddBalance($addbalance)
     {
+        if (isset($addbalance['sourceid']) && $addbalance['sourceid'] == -1) {
+            $default_source_id = $this->db->GetOne('SELECT id FROM cashsources WHERE isdefault = 1');
+        }
+
         $args = array(
             'time' => isset($addbalance['time']) ? $addbalance['time'] : time(),
             SYSLOG::RES_USER => isset($addbalance['userid']) && !empty($addbalance['userid']) ? $addbalance['userid'] : Auth::GetCurrentUser(),
@@ -3661,7 +3811,9 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             'itemid' => isset($addbalance['itemid']) ? $addbalance['itemid'] : 0,
             'servicetype' => isset($addbalance['servicetype']) && !empty($addbalance['servicetype']) ? $addbalance['servicetype'] : null,
             SYSLOG::RES_CASHIMPORT => !empty($addbalance['importid']) ? $addbalance['importid'] : null,
-            SYSLOG::RES_CASHSOURCE => !empty($addbalance['sourceid']) ? $addbalance['sourceid'] : null,
+            SYSLOG::RES_CASHSOURCE => !empty($addbalance['sourceid'])
+                ? ($addbalance['sourceid'] == -1 ? ($default_source_id ? $default_source_id : null) : $addbalance['sourceid'])
+                : null,
         );
         $res = $this->db->Execute('INSERT INTO cash (time, userid, value, currency, currencyvalue, type, taxid,
 			customerid, comment, docid, itemid, servicetype, importid, sourceid)
@@ -3709,7 +3861,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     'UPDATE invoicecontents SET value = ?, count = ? WHERE docid = ? AND itemid = ?',
                     array(
                         str_replace(',', '.', $previous_record['value']),
-                        str_replace(',', '.', -$previous_record['count']),
+                        0,
                         $row['docid'],
                         $row['itemid']
                     )
@@ -3823,7 +3975,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         $row['payday'] = trans('daily');
                         break;
                     case WEEKLY:
-                        $row['payday'] = trans('weekly ($a)', strftime("%a", mktime(0, 0, 0, 0, $row['at'] + 5, 0)));
+                        $row['payday'] = trans('weekly ($a)', date('D', mktime(0, 0, 0, 0, $row['at'] + 5, 0)));
                         break;
                     case MONTHLY:
                         $row['payday'] = trans('monthly ($a)', $row['at']);
@@ -3857,7 +4009,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                 $payment['payday'] = trans('daily');
                 break;
             case WEEKLY:
-                $payment['payday'] = trans('weekly ($a)', strftime("%a", mktime(0, 0, 0, 0, $payment['at'] + 5, 0)));
+                $payment['payday'] = trans('weekly ($a)', date('D', mktime(0, 0, 0, 0, $payment['at'] + 5, 0)));
                 break;
             case MONTHLY:
                 $payment['payday'] = trans('monthly ($a)', $payment['at']);
@@ -3996,14 +4148,21 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function GetTaxes($from = null, $to = null, $default = null)
     {
-        $from = $from ? $from : mktime(0, 0, 0);
-        $to = $to ? $to : mktime(23, 59, 59);
+        $from = $from ?: mktime(0, 0, 0);
+        $to = $to ?: mktime(23, 59, 59);
+
+        $default_taxrate = ConfigHelper::getConfig('phpui.default_taxrate');
+        $default_taxlabel = ConfigHelper::getConfig('phpui.default_taxlabel');
 
         return $this->db->GetAllByKey(
             'SELECT id, value, label, taxed FROM taxes
-            WHERE (validfrom = 0 OR validfrom <= ?)
-            AND (validto = 0 OR validto >= ?)'
-            . ($default ? ' AND value = ' . ConfigHelper::getConfig('phpui.default_taxrate') : '' )
+            WHERE validfrom <= ?
+                AND (validto = 0 OR validto >= ?)'
+                . ($default ? (
+                    isset($default_taxlabel)
+                        ? ' AND label = ' . $this->db->Escape($default_taxlabel)
+                        : (isset($default_taxrate) ? ' AND value = ' . $default_taxrate : '')
+                ) : '')
             . ' ORDER BY value',
             'id',
             array($from, $to)
@@ -4055,7 +4214,15 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function isDocumentReferenced($id)
     {
-        return $this->db->GetOne('SELECT id FROM documents WHERE reference = ?', array($id)) > 0;
+        return $this->db->GetOne(
+            'SELECT d.id
+            FROM documents d
+            WHERE d.reference = ?
+                AND d.type >= 0',
+            array(
+                $id,
+            )
+        ) > 0;
     }
 
     public function MarkDocumentsAsSent($ids)
@@ -4230,7 +4397,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         $customer = isset($receipt['customer']) ? $receipt['customer'] : null;
         $contents = $receipt['contents'];
 
-        if (!$receipt['number']) {
+        if (empty($receipt['number'])) {
             $receipt['number'] = $document_manager->GetNewDocumentNumber(array(
                 'doctype' => DOC_RECEIPT,
                 'planid' => $receipt['numberplanid'],
@@ -4260,8 +4427,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             }
         }
 
-        $division_manager = new LMSDivisionManager($this->db, $this->auth, $this->cache, $this->syslog);
-        $division = $division_manager->GetDivision($receipt['customer']['divisionid']);
+        if ($customer && !empty($customer['divisionid'])) {
+            $division_manager = new LMSDivisionManager($this->db, $this->auth, $this->cache, $this->syslog);
+            $division = $division_manager->GetDivision($customer['divisionid']);
+        }
 
         $fullnumber = docnumber(array(
             'number' => $receipt['number'],
@@ -4284,22 +4453,22 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                     ? $customer['city'] . ', ' : '') . $customer['address']) : '',
             'zip' => $customer ? $customer['zip'] : '',
             'city' => $customer ? ($customer['postoffice'] ? $customer['postoffice'] : $customer['city']) : '',
-            SYSLOG::RES_COUNTRY => $receipt['customer']['countryid'] ? $receipt['customer']['countryid'] : null,
-            SYSLOG::RES_DIV => $receipt['customer']['divisionid'],
-            'div_name' => ($division['name'] ? $division['name'] : ''),
-            'div_shortname' => ($division['shortname'] ? $division['shortname'] : ''),
-            'div_address' => ($division['address'] ? $division['address'] : ''),
-            'div_city' => ($division['city'] ? $division['city'] : ''),
-            'div_zip' => ($division['zip'] ? $division['zip'] : ''),
-            'div_' . SYSLOG::getResourceKey(SYSLOG::RES_COUNTRY) => ($division['countryid'] ? $division['countryid'] : null),
-            'div_ten' => ($division['ten'] ? $division['ten'] : ''),
-            'div_regon' => ($division['regon'] ? $division['regon'] : ''),
-            'div_bank' => $division['bank'] ?: null,
-            'div_account' => ($division['account'] ? $division['account'] : ''),
-            'div_inv_header' => ($division['inv_header'] ? $division['inv_header'] : ''),
-            'div_inv_footer' => ($division['inv_footer'] ? $division['inv_footer'] : ''),
-            'div_inv_author' => ($division['inv_author'] ? $division['inv_author'] : ''),
-            'div_inv_cplace' => ($division['inv_cplace'] ? $division['inv_cplace'] : ''),
+            SYSLOG::RES_COUNTRY => $customer && !empty($customer['countryid']) ? $customer['countryid'] : null,
+            SYSLOG::RES_DIV => $customer ? $customer['divisionid'] : null,
+            'div_name' => !empty($division['name']) ? $division['name'] : '',
+            'div_shortname' => !empty($division['shortname']) ? $division['shortname'] : '',
+            'div_address' => !empty($division['address']) ? $division['address'] : '',
+            'div_city' => !empty($division['city']) ? $division['city'] : '',
+            'div_zip' => !empty($division['zip']) ? $division['zip'] : '',
+            'div_' . SYSLOG::getResourceKey(SYSLOG::RES_COUNTRY) => isset($division['countryid']) ? $division['countryid'] : null,
+            'div_ten' => !empty($division['ten']) ? $division['ten'] : '',
+            'div_regon' => !empty($division['regon']) ? $division['regon'] : '',
+            'div_bank' => !empty($division['bank']) ? $division['bank'] : null,
+            'div_account' => !empty($division['account']) ? $division['account'] : '',
+            'div_inv_header' => !empty($division['inv_header']) ? $division['inv_header'] : '',
+            'div_inv_footer' => !empty($division['inv_footer']) ? $division['inv_footer'] : '',
+            'div_inv_author' => !empty($division['inv_author']) ? $division['inv_author'] : '',
+            'div_inv_cplace' => !empty($division['inv_cplace']) ? $division['inv_cplace'] : '',
             'closed' => $customer || $receipt['o_type'] != 'advance' ? 1 : 0,
             'fullnumber' => $fullnumber,
             'currency' => isset($receipt['currency']) ? $receipt['currency'] : Localisation::getCurrentCurrency(),
@@ -4527,6 +4696,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
         foreach ($promotions as $promotionid => &$promotion) {
             $promotion['schemas'] = array();
+            $promotion['attachments'] = array();
         }
         unset($promotion);
 
@@ -4549,7 +4719,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             foreach ($promotion_schemas as $promotion_schema) {
                 $period_labels = array(trans('Activation'));
                 if (empty($promotion_schema['sdata'])) {
-                    $period_labels[] = trans('Months $a-', 1);
+                    $period_labels[] = trans('Months $a-$b', 1, '&hellip;');
                 } else {
                     $periods = explode(';', $promotion_schema['sdata']);
                     $month = 1;
@@ -4558,21 +4728,41 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
                         : trans('Months $a-$b', $month, $month + $period - 1));
                         $month += $period;
                     }
-                    $period_labels[] = trans('Months $a-', $month);
+                    $period_labels[] = trans('Months $a-$b', $month, '&hellip;');
                 }
 
-                $promotions[$promotion_schema['promotionid']]['schemas'][$promotion_schema['id']] =
-                array(
+                $promotions[$promotion_schema['promotionid']]['schemas'][$promotion_schema['id']] = array(
                     'id' => $promotion_schema['id'],
                     'name' => $promotion_schema['name'],
                     'valid' => $promotion_schema['valid'],
                     'datefrom' => $promotion_schema['datefrom'],
-                    'dateto' => $promotion_schema['dateto'],
+                    'dateto' => isset($promotion_schema['dateto']) ? $promotion_schema['dateto'] : null,
                     'description' => $promotion_schema['description'],
                     'tariffs' => $promotion_schema['tariffs'],
                     'period_labels' => $period_labels,
                     'items' => array(),
+                    'attachments' => array(),
                 );
+            }
+        }
+
+        $promotion_attachments = $this->db->GetAll(
+            'SELECT a.*, COALESCE(a.promotionid, s.promotionid) AS promotionid
+            FROM promotionattachments a
+            LEFT JOIN promotionschemas s ON s.id = a.promotionschemaid'
+        );
+        if (!empty($promotion_attachments)) {
+            foreach ($promotion_attachments as $attachment) {
+                if (empty($attachment['promotionschemaid'])) {
+                    if (isset($promotions[$attachment['promotionid']])) {
+                        $promotions[$attachment['promotionid']]['attachments'][$attachment['id']] = $attachment;
+                    }
+                } else {
+                    if (isset($promotions[$attachment['promotionid']]['schemas'][$attachment['promotionschemaid']])) {
+                        $promotions[$attachment['promotionid']]['schemas'][$attachment['promotionschemaid']]['attachments'][$attachment['id']] =
+                            $attachment;
+                    }
+                }
             }
         }
 
@@ -4622,7 +4812,10 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             }
 
             $superuser = ConfigHelper::checkPrivilege('superuser');
-            $allow_modify_values_for_privileged_user = ConfigHelper::checkConfig('phpui.promotion_allow_modify_values_for_privileged_user');
+            $allow_modify_values_for_privileged_user = ConfigHelper::checkConfig(
+                'promotions.allow_modify_values_for_privileged_user',
+                ConfigHelper::checkConfig('phpui.promotion_allow_modify_values_for_privileged_user')
+            );
             $promotion_management = ConfigHelper::checkPrivilege('promotion_management');
 
             foreach ($promotion_schema_assignments as $assign) {
@@ -4772,7 +4965,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function GetDocumentLastReference($docid)
     {
-        while ($refdocid = $this->db->GetOne("SELECT id FROM documents WHERE reference = ?", array($docid))) {
+        while ($refdocid = $this->db->GetOne("SELECT id FROM documents WHERE reference = ? AND type > 0", array($docid))) {
             $docid = $refdocid;
         }
         return $docid;
@@ -4962,7 +5155,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
         $args = array(
             'cdate' => $currtime,
             'sdate' => $currtime,
-            'paytime' => $proforma['paytime'],
+            'paytime' => 0,
             'paytype' => $proforma['paytype'],
             'flags' => (empty($proforma['splitpayment']) ? 0 : DOC_FLAG_SPLIT_PAYMENT)
                 + (empty($proforma['netflag']) ? 0 : DOC_FLAG_NET_ACCOUNT),
@@ -5090,7 +5283,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
     {
         return ($this->db->GetOne(
             'SELECT d.id FROM documents d
-            LEFT JOIN documents d2 ON d2.reference = d.id
+            LEFT JOIN documents d2 ON d2.reference = d.id AND d2.type > 0
             WHERE d.id = ? AND d.type IN ? AND d.cancelled = 0 AND d.closed = 0 AND d.archived = 0 AND d2.id IS NULL
                 ' . (ConfigHelper::checkPrivilege('published_document_modification') ? '' : ' AND d.published = 0'),
             array($id, array(DOC_INVOICE, DOC_CNOTE, DOC_INVOICE_PRO))
@@ -5115,7 +5308,7 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
 
     public function getPromotionSchema($id)
     {
-        return $this->db->GetRow(
+        $schema = $this->db->GetRow(
             'SELECT s.*, a.assignmentcount
             FROM promotionschemas s
             LEFT JOIN (
@@ -5126,11 +5319,24 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             WHERE s.id = ?',
             array($id)
         );
+
+        $schema['attachments'] = $this->db->GetAllBykey(
+            'SELECT *
+            FROM promotionattachments
+            WHERE promotionschemaid = ?',
+            'id',
+            array($id)
+        );
+        if (empty($schema['attachments'])) {
+            $schema['attachments'] = array();
+        }
+
+        return $schema;
     }
 
     public function getPromotion($id)
     {
-        return $this->db->GetRow(
+        $promotion = $this->db->GetRow(
             'SELECT p.*, a.assignmentcount
             FROM promotions p
             LEFT JOIN (
@@ -5142,5 +5348,18 @@ class LMSFinanceManager extends LMSManager implements LMSFinanceManagerInterface
             WHERE p.id = ?',
             array($id)
         );
+
+        $promotion['attachments'] = $this->db->GetAllByKey(
+            'SELECT *, 0 AS deleted
+            FROM promotionattachments
+            WHERE promotionid = ?',
+            'id',
+            array($id)
+        );
+        if (empty($promotion['attachments'])) {
+            $promotion['attachments'] = array();
+        }
+
+        return $promotion;
     }
 }

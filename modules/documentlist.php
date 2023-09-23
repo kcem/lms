@@ -31,12 +31,11 @@ if (!isset($_GET['init'])) {
 
     if (isset($_GET['t'])) {
         if (is_array($_GET['t'])) {
-            $filter['type'] = Utils::filterIntegers($_GET['t']);
-            if (count($filter['type']) == 1) {
-                $first = reset($filter['type']);
-                if ($first == 0) {
-                    $filter['type'] = 0;
-                }
+            $filter['type'] = array_filter(Utils::filterIntegers($_GET['t']), function ($type) {
+                return !empty($type);
+            });
+            if (empty($filter['type'])) {
+                $filter['type'] = 0;
             }
         } else {
             $filter['type'] = intval($_GET['t']);
@@ -189,7 +188,9 @@ $SESSION->add_history_entry();
 
 if ($docid = $SESSION->get('documentprint')) {
     $SMARTY->assign('docid', $docid);
+    $SMARTY->assign('attachments', $SESSION->get('document-with-attachments'));
     $SESSION->remove('documentprint');
+    $SESSION->remove('document-with-attachments');
 }
 
 if ($filter['total']) {
@@ -203,7 +204,7 @@ if (!ConfigHelper::checkConfig('phpui.big_networks')) {
 
 $SMARTY->assign('users', $LMS->GetUserNames());
 $SMARTY->assign('numberplans', $LMS->GetNumberPlans(array(
-    'doctype' => array(DOC_CONTRACT, DOC_ANNEX, DOC_PROTOCOL, DOC_ORDER, DOC_SHEET, -6, -7, -8, -9, -99, DOC_PRICELIST, DOC_PROMOTION, DOC_WARRANTY, DOC_REGULATIONS, DOC_OTHER),
+    'doctype' => array(DOC_CONTRACT, DOC_ANNEX, DOC_PROTOCOL, DOC_ORDER, DOC_SHEET, -6, -7, -8, -9, -99, DOC_PRICE_LIST, DOC_PROMOTION, DOC_WARRANTY, DOC_REGULATIONS, DOC_OTHER),
 )));
 $SMARTY->assign('documentlist', $documentlist);
 $SMARTY->assign('pagination', $pagination);

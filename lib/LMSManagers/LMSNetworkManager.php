@@ -303,6 +303,10 @@ class LMSNetworkManager extends LMSManager implements LMSNetworkManagerInterface
             $search['compareType'] = '=';
         }
 
+        if (empty($search['operatorType'])) {
+            $search['operatorType'] = 'AND';
+        }
+
         foreach ($search as $k => $v) {
             if ($v != '') {
                 switch ($k) {
@@ -356,7 +360,9 @@ class LMSNetworkManager extends LMSManager implements LMSNetworkManagerInterface
                 }
             }
         }
-        $sqlwhere = rtrim($sqlwhere, $search['operatorType']);
+        if (isset($search['operatorType'])) {
+            $sqlwhere = rtrim($sqlwhere, $search['operatorType']);
+        }
 
         $count = isset($search['count']) && !empty($search['count']);
 
@@ -445,18 +451,47 @@ class LMSNetworkManager extends LMSManager implements LMSNetworkManagerInterface
         $cnetaddr = ip_long($network);
         $cbroadcast = ip_long(getbraddr($network, $mask));
 
-        return $this->db->GetOne('SELECT 1 FROM networks
-			WHERE id != ? AND hostid = ? AND (
-				address = ? OR broadcast(address, inet_aton(mask)) = ?
-				OR (address > ? AND broadcast(address, inet_aton(mask)) < ?) 
-				OR (address < ? AND broadcast(address, inet_aton(mask)) > ?) 
-			)', array(
+        if (Utils::isPrivateAddress($network)) {
+            return $this->db->GetOne(
+                'SELECT 1 FROM networks
+                WHERE id <> ?
+                    AND hostid = ?
+                    AND (
+                        address = ? OR broadcast(address, inet_aton(mask)) = ?
+                            OR (address > ? AND broadcast(address, inet_aton(mask)) < ?)
+                            OR (address < ? AND broadcast(address, inet_aton(mask)) > ?)
+                    )',
+                array(
                     intval($ignorenet),
                     intval($hostid),
-                    $cnetaddr, $cbroadcast,
-                    $cnetaddr, $cbroadcast,
-                    $cnetaddr, $cbroadcast
-        ));
+                    $cnetaddr,
+                    $cbroadcast,
+                    $cnetaddr,
+                    $cbroadcast,
+                    $cnetaddr,
+                    $cbroadcast,
+                )
+            );
+        } else {
+            return $this->db->GetOne(
+                'SELECT 1 FROM networks
+                WHERE id <> ?
+                    AND (
+                        address = ? OR broadcast(address, inet_aton(mask)) = ?
+                            OR (address > ? AND broadcast(address, inet_aton(mask)) < ?)
+                            OR (address < ? AND broadcast(address, inet_aton(mask)) > ?)
+                    )',
+                array(
+                    intval($ignorenet),
+                    $cnetaddr,
+                    $cbroadcast,
+                    $cnetaddr,
+                    $cbroadcast,
+                    $cnetaddr,
+                    $cbroadcast,
+                )
+            );
+        }
     }
 
     public function NetworkShift($netid, $network = '0.0.0.0', $mask = '0.0.0.0', $shift = 0)
@@ -731,7 +766,10 @@ class LMSNetworkManager extends LMSManager implements LMSNetworkManagerInterface
     {
         global $LMS;
 
-        $network = $this->db->GetRow('SELECT no.ownerid, ne.id, ne.name, ne.vlanid, vl.vlanid, inet_ntoa(ne.address) AS address,
+        $network = $this->db->GetRow('SELECT no.ownerid, ne.id, ne.name,
+                vl.vlanid, vl.description AS vlandescription,
+                vl.customerid AS vlancustomerid,
+                inet_ntoa(ne.address) AS address,
                 ne.address AS addresslong, ne.mask, ne.interface, ne.gateway, ne.dns, ne.dns2,
                 ne.domain, ne.wins, ne.dhcpstart, ne.dhcpend, ne.hostid, ne.authtype, inet_ntoa(ne.snat) AS snat,
                 mask2prefix(inet_aton(ne.mask)) AS prefix, ne.notes, ne.pubnetid,
@@ -741,9 +779,16 @@ class LMSNetworkManager extends LMSManager implements LMSNetworkManagerInterface
             LEFT JOIN vlans vl ON (vl.id = ne.vlanid)
             WHERE ne.id = ?', array($id));
 
-        if ($network['ownerid']) {
+        if (!empty($network['ownerid'])) {
             $customer_manager = new LMSCustomerManager($this->db, $this->auth, $this->cache, $this->syslog);
             $network['customername'] = $customer_manager->GetCustomerName($network['ownerid']);
+        }
+
+        if (!empty($network['vlancustomerid'])) {
+            if (!isset($customer_manager)) {
+                $customer_manager = new LMSCustomerManager($this->db, $this->auth, $this->cache, $this->syslog);
+            }
+            $network['vlancustomername'] = $customer_manager->GetCustomerName($network['vlancustomerid']);
         }
 
         if ($network['pubnetid']) {
@@ -938,6 +983,10 @@ class LMSNetworkManager extends LMSManager implements LMSNetworkManagerInterface
     {
         if (!empty($params)) {
             extract($params);
+        }
+
+        if (!isset($orderby)) {
+            $orderby = '';
         }
 
         switch ($orderby) {

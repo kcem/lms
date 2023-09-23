@@ -31,6 +31,19 @@
 									<col style="width: 1%;">
 									<col style="width: 98%;">
 								</colgroup>
+								{if !empty($netdev.division)}
+									<tr>
+										<td>
+											{icon name="division"}
+										</td>
+										<td class="nobr">
+											<strong>{trans("Division")}</strong>
+										</td>
+										<td>
+											<a href="?m=divisionedit&id={$netdev.divisionid}">{$netdev.division|escape} (#{$netdev.divisionid})</a>
+										</td>
+									</tr>
+								{/if}
 								{if !empty($netdev.ownerid)}
 									<tr>
 										<td>
@@ -145,6 +158,9 @@
 												{if $netdev.borough_name}
 													({$netdev.state_name} / {$netdev.district_name} / {$_BOROUGHTYPES[$netdev.borough_type]} {$netdev.borough_name})
 												{/if}
+												{if !empty($netdev.ownerid) && empty($netdev.address_id)}
+													<span class="lms-ui-alert bold">{trans("<!node-location>(implicit)")}</span>
+												{/if}
 											{else}
 												{$netdev.netnode.location}
 												{if $netdev.netnode.location_borough_name}
@@ -168,9 +184,11 @@
 												<input id="longitude" type="hidden" value="{$netdev.netnode.longitude}">
 												{$netdev.netnode.longitude}
 												{trans("(from network node)")}
+												{$longitude = $netdev.netnode.longitude}
 											{else}
 												<input id="longitude" type="hidden" value="{$netdev.longitude}">
 												{$netdev.longitude}
+												{$longitude = $netdev.longitude}
 											{/if}
 										</td>
 									</tr>
@@ -186,9 +204,11 @@
 												<input id="longitude" type="hidden" value="{$netdev.netnode.latitude}">
 												{$netdev.netnode.latitude}
 												{trans("(from network node)")}
+												{$latitude = $netdev.netnode.latitude}
 											{else}
 												<input id="latitude" type="hidden" value="{$netdev.latitude}">
 												{$netdev.latitude}
+												{$latitude = $netdev.latitude}
 											{/if}
 										</td>
 									</tr>
@@ -198,6 +218,15 @@
 										<td>
 											{button type="link" icon="map" label="Show on map"
 												href="?m=netdevmap&netdevid={$netdev.id}"}
+										</td>
+									</tr>
+									<tr>
+										<td colspan="2">
+										</td>
+										<td>
+											{$gps_coordinate_url = ConfigHelper::getConfig('phpui.gps_coordinate_url', 'https://www.google.com/maps/search/?api=1&query=%latitude%2C%longitude')}
+											{button type="link" icon="location" label="Show on external map" external=true
+												href="{$gps_coordinate_url|replace:"%longitude":$longitude|replace:"%latitude":$latitude}"}
 										</td>
 									</tr>
 								{/if}
@@ -320,7 +349,7 @@
 											<strong>{trans("Purchase date")}</strong>
 										</td>
 										<td>
-											{$netdev.purchasetime|date_format:"%Y/%m/%d"}
+											{$netdev.purchasetime|date_format:"Y-m-d"}
 										</td>
 									</tr>
 								{/if}
@@ -339,7 +368,7 @@
 										{else}
 											{assign var=periodid value=$netdev.guaranteeperiod}
 											{$_GUARANTEEPERIODS.$periodid}
-												({if $netdev.guaranteetime-$smarty.now < 0}{trans("expired<!guarantee>")}{else}{$netdev.guaranteetime|date_format:"%Y/%m/%d"}{/if})
+												({if $netdev.guaranteetime-$smarty.now < 0}{trans("expired<!guarantee>")}{else}{$netdev.guaranteetime|date_format:"Y-m-d"}{/if})
 										{/if}
 									</td>
 								</tr>
@@ -406,7 +435,7 @@
 					<div class="lms-ui-box-button-container">
 						{button icon="convert" id="replace-netdev" label="Replace"}
 						<select id="target-netdev" class="lms-ui-advanced-select">
-							<option value="">{trans("- select target network device -")}</option>
+							<option value="">{trans("— select target network device —")}</option>
 							{foreach $targetnetdevs as $targetnetdev}
 								<option value="{$targetnetdev.id}" title="{$targetnetdev.producer} / {$targetnetdev.model}"
 									{if $netdev.ports > $targetnetdev.ports}disabled{/if}

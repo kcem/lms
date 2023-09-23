@@ -55,7 +55,7 @@ if (isset($_GET['id']) && $action=='edit') {
 
     $note['oldcdate'] = $note['cdate'];
     $note['oldnumber'] = $note['number'];
-    $note['oldnumberplanid'] = $note['numberplanid'];
+    $note['oldnumberplanid'] = empty($note['numberplanid']) ? 0 : $note['numberplanid'];
     $note['oldcustomerid'] = $note['customerid'];
 
     $SESSION->save('notecustomer', $LMS->GetCustomer($note['customerid'], true));
@@ -161,7 +161,7 @@ switch ($action) {
         }
 
         $note['customerid'] = $_POST['customerid'];
-
+        $note['divisionid'] = $LMS->GetCustomerDivision($note['customerid']);
 
         if (($note['numberplanid'] && !$LMS->checkNumberPlanAccess($note['numberplanid']))
             || ($note['oldnumberplanid'] && !$LMS->checkNumberPlanAccess($note['oldnumberplanid']))) {
@@ -307,6 +307,7 @@ switch ($action) {
                 'name' => $customer['customername'],
                 'address' => $customer['address'],
                 'paytime' => $note['paytime'],
+                'paytype' => $note['paytype'],
                 'ten' => $customer['ten'],
                 'ssn' => $customer['ssn'],
                 'zip' => $customer['zip'],
@@ -334,7 +335,7 @@ switch ($action) {
             );
             $DB->Execute(
                 'UPDATE documents SET number = ?, numberplanid = ?,
-                cdate = ?, customerid = ?, name = ?, address = ?, paytime = ?,
+                cdate = ?, customerid = ?, name = ?, address = ?, paytime = ?, paytype = ?,
                 ten = ?, ssn = ?, zip = ?, city = ?, countryid = ?, divisionid = ?,
                 div_name = ?, div_shortname = ?, div_address = ?, div_city = ?, div_zip = ?, div_countryid = ?,
                 div_ten = ?, div_regon = ?, div_bank = ?, div_account = ?, div_inv_header = ?, div_inv_footer = ?,
@@ -429,7 +430,7 @@ switch ($action) {
 
 $SESSION->save('note', $note);
 $SESSION->save('notecontents', $contents);
-$SESSION->save('notecustomer', $customer);
+$SESSION->save('notecustomer', empty($customer) ? array() : $customer);
 $SESSION->save('noteediterror', $error);
 
 if ($action && !$error) {
@@ -459,6 +460,6 @@ $SMARTY->assign('planDocumentType', DOC_DNOTE);
 
 $SMARTY->assign('error', $error);
 $SMARTY->assign('contents', $contents);
-$SMARTY->assign('customer', $customer);
+$SMARTY->assign('customer', empty($customer) ? array() : $customer);
 $SMARTY->assign('note', $note);
 $SMARTY->display('note/noteedit.html');

@@ -72,6 +72,10 @@ if (!isset($_POST['xjxfun'])) {
     $SESSION->add_history_entry();
 
     $layout['pagetitle'] = trans('Customer Info: $a', $customerinfo['customername']);
+} else {
+    $customerinfo = array(
+        'id' => $customerid,
+    );
 }
 
 $hook_data = $LMS->executeHook(
@@ -82,6 +86,7 @@ $hook_data = $LMS->executeHook(
     )
 );
 $customerinfo = $hook_data['customerinfo'];
+
 $SMARTY->assign('xajax', $LMS->RunXajax());
 $SMARTY->assign('customerinfo_sortable_order', $SESSION->get_persistent_setting('customerinfo-sortable-order'));
 $SMARTY->display('customer/customerinfo.html');

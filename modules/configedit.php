@@ -53,8 +53,10 @@ if (isset($_GET['s']) && isset($_GET['v'])) {
     if (isset($_GET['d'])) {
         $params['divisionid'] = $_GET['d'];
     }
-} else {
+} elseif (isset($_GET['id'])) {
     $params['id'] = $_GET['id'];
+} else {
+    $SESSION->redirect_to_history_entry();
 }
 
 if (!($id = $LMS->ConfigOptionExists($params))) {
@@ -113,7 +115,7 @@ if (isset($_POST['config'])) {
         $error['var'] = trans('Option name is required!');
     } elseif (strlen($cfg['var'])>64) {
         $error['var'] = trans('Option name is too long (max.64 characters)!');
-    } elseif (!preg_match('/^[a-z0-9_-]+$/', $cfg['var'])) {
+    } elseif (!preg_match('/^[a-z0-9_-]+$/i', $cfg['var'])) {
         $error['var'] = trans('Option name contains forbidden characters!');
     }
 
@@ -170,7 +172,7 @@ if (isset($_POST['config'])) {
                 }
                 $divisionaccess = $LMS->CheckDivisionsAccess(array('divisions' => $cfg['divisionid'], 'user_id' => $cfg['userid']));
                 if (!$divisionaccess) {
-                    $error['userid'] = trans('User is not asigned to the division!');
+                    $error['userid'] = trans('User is not assigned to the division!');
                 }
                 break;
             case 'user':

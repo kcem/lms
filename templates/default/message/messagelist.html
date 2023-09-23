@@ -38,7 +38,7 @@
 						<strong>{trans("Filter:")}</strong>
 						<INPUT type="text" name="search" value="{$listdata.search}" {tip text="Enter value of searching data and select category"}>&nbsp;
 						<SELECT size="1" name="cat">
-							<OPTION value=""{if $listdata.cat == ""} SELECTED{/if}>{trans("- select filter category -")}</OPTION>
+							<OPTION value=""{if $listdata.cat == ""} SELECTED{/if}>{trans("— select filter category —")}</OPTION>
 							<OPTION value="subject"{if $listdata.cat == "subject"} SELECTED{/if}>{trans("subject")}</OPTION>
 							<OPTION value="name"{if $listdata.cat == "name"} SELECTED{/if}>{trans("customer name")}</OPTION>
 							<OPTION value="customerid"{if $listdata.cat == "customerid"} SELECTED{/if}>{trans("customer ID")}</OPTION>
@@ -51,7 +51,7 @@
 					<label>
 						{trans("Type:")}
 						<SELECT size="1" name="type">
-							<OPTION value="0"{if !$listdata.type} SELECTED{/if}>{trans("- all types -")}</OPTION>
+							<OPTION value="0"{if !$listdata.type} SELECTED{/if}>{trans("— all types —")}</OPTION>
 							<OPTION value="{$smarty.const.MSG_MAIL}"{if $listdata.type == $smarty.const.MSG_MAIL} SELECTED{/if}>{trans("email")}</OPTION>
 							<OPTION value="{$smarty.const.MSG_SMS}"{if $listdata.type == $smarty.const.MSG_SMS} SELECTED{/if}>{trans("sms")}</OPTION>
 							<OPTION value="{$smarty.const.MSG_ANYSMS}"{if $listdata.type == $smarty.const.MSG_ANYSMS} SELECTED{/if}>{trans("any sms")}</OPTION>
@@ -63,7 +63,7 @@
 					<label>
 						{trans("Status:")}
 						<SELECT size="1" name="status">
-							<OPTION value=""{if !$listdata.status} SELECTED{/if}>{trans("- all statuses -")}</OPTION>
+							<OPTION value=""{if !$listdata.status} SELECTED{/if}>{trans("— all statuses —")}</OPTION>
 							<OPTION value="{$smarty.const.MSG_NEW}"{if $listdata.status == $smarty.const.MSG_NEW} SELECTED{/if}>{trans("waiting<!plural>")}</OPTION>
 						{*
 							<OPTION value="{$smarty.const.MSG_DRAFT}"{if $listdata.status == $smarty.const.MSG_DRAFT} SELECTED{/if}>{trans("drafts")}</OPTION>
@@ -74,8 +74,19 @@
 							<OPTION value="{$smarty.const.MSG_CANCELLED}"{if $listdata.status == $smarty.const.MSG_CANCELLED} selected{/if}>{trans("cancelled<!plural>")}</OPTION>
 							<OPTION value="{$smarty.const.MSG_BOUNCED}"{if $listdata.status == $smarty.const.MSG_BOUNCED} selected{/if}>{trans("bounced<!plural>")}</OPTION>
 						</SELECT>
-						<A href="javascript: document.page.submit();">&raquo;&raquo;&raquo;</A>
 					</label>
+					<span class="lms-ui-date-period-container">
+						{date_period_preset from="[name=\"datefrom\"][form=\"messagelist\"]" to="[name=\"dateto\"][form=\"messagelist\"]"}
+						<span>{trans("from")}</span>
+						<input type="text" name="datefrom" size="10" maxlength="10" form="messagelist"
+							value="{if !empty($listdata.datefrom)}{$listdata.datefrom|date_format:"Y/m/d"}{/if}"
+							{tip class="lms-ui-date" text="Enter date in YYYY/MM/DD format (empty field means no limit) or click to choose it from calendar"}>
+						<span>{trans("to")}</span>
+						<input type="text" name="dateto" size="10" maxlength="10" form="messagelist"
+							value="{if !empty($listdata.dateto)}{$listdata.dateto|date_format:"Y/m/d"}{/if}"
+							{tip class="lms-ui-date" text="Enter date in YYYY/MM/DD format (empty field means no limit) or click to choose it from calendar"}>
+					</span>
+					<A href="javascript: document.page.submit();">&raquo;&raquo;&raquo;</A>
 				</div>
 				</FORM>
 			</div>
@@ -113,7 +124,7 @@
 		data-popup-menu-title="{t a=$message.id|string_format:"%d"}Message #$a{/t}"
 	>
 		<TD class="nobr">
-			{$message.cdate|date_format:"%Y/%m/%d %H:%M"}
+			{$message.cdate|date_format:"Y-m-d H:i"}
 		</TD>
 		<TD class="text-center nobr">
 			{if $message.type == $smarty.const.MSG_MAIL}

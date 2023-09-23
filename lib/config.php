@@ -107,6 +107,10 @@ $DEFAULTS = array(
         'auto_remove_investment_project' => true,
         'logout_confirmation' => false
     ),
+    'assignments' => array(
+        'default_document_type' => 0,
+        'default_period' => 3,
+    ),
     'invoices' => array(
         'template_file' => 'FT-0100',
         'content_type' => 'application/pdf',
@@ -127,6 +131,20 @@ $DEFAULTS = array(
         'content_type' => 'text/html',
         'type' => 'html',
         'attachment_name' => '',
+    ),
+    'rt' => array(
+        'backend_mode' => false,
+        'new_ticket_notify' => true,
+        'notification_customerinfo' => true,
+        'quote_body' => false,
+        'sender_name' => '',
+        'show_stats' => true,
+        'ticket_template_file' => 'rtticketprint.html',
+        'ticketlist_pagelimit' => 100,
+        'ticketlist_status' => '',
+    ),
+    'timetable' => array(
+        'default_forward_day_limit' => 7,
     ),
     'notes' => array(
         'template_file' => 'note.html',

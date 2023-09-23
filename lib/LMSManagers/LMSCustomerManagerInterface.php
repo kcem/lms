@@ -3,7 +3,7 @@
 /*
  *  LMS version 1.11-git
  *
- *  Copyright (C); 2001-2021 LMS Developers
+ *  Copyright (C); 2001-2022 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -74,11 +74,15 @@ interface LMSCustomerManagerInterface
 
     public function GetCustomer($id, $short = false);
 
+    public function GetCustomerAltName($id);
+
     public function customerUpdate($customerdata);
 
     public function deleteCustomer($id);
 
     public function deleteCustomerPermanent($id);
+
+    public function restoreCustomer($id);
 
     public function checkCustomerAddress($a_id, $c_id);
 
@@ -130,6 +134,8 @@ interface LMSCustomerManagerInterface
 
     public function addCustomerNote($params);
 
+    public function updateCustomerNote($params);
+
     public function delCustomerNote($id);
 
     public function raiseCustomerKarma($id);
@@ -138,7 +144,17 @@ interface LMSCustomerManagerInterface
 
     public function getCustomerPin($id);
 
+    public function getCustomerPinRequirements();
+
+    public function checkCustomerPin($id, $pin);
+
+    public function getCustomerTen($id);
+
+    public function getCustomerSsn($id);
+
     public function changeCustomerType($id, $tyoe);
+
+    public function changeCustomerStatus($id, $status);
 
     public function getCustomerCalls(array $params);
 
@@ -155,4 +171,16 @@ interface LMSCustomerManagerInterface
     public function addCustomerCallAssignment($customerid, $callid);
 
     public function getCustomerModificationInfo($customerid);
+
+    public function getCustomerExternalIDs($customerid, $serviceproviderid = null, $serviceprovidersonly = false);
+
+    public function addCustomerExternalID($customerid, $extid, $serviceproviderid);
+
+    public function updateCustomerExternalID($customerid, $extid, $oldextid, $serviceproviderid, $oldserviceproviderid);
+
+    public function updateCustomerExternalIDs($customerid, array $customerextids, $only_passed_service_providers = false);
+
+    public function deleteCustomerExternalID($customerid, $extid, $serviceproviderid);
+
+    public function getServiceProviders();
 }

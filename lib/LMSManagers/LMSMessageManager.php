@@ -244,6 +244,7 @@ class LMSMessageManager extends LMSManager implements LMSMessageManagerInterface
         if (!isset($type)) {
             $type = '';
         }
+
         if (!isset($count)) {
             $count = false;
         }
@@ -422,7 +423,7 @@ class LMSMessageManager extends LMSManager implements LMSMessageManagerInterface
             $params['body'],
             isset($params['userid']) ? $params['userid'] : Auth::GetCurrentUser(),
             $params['type'] == MSG_MAIL && isset($params['sender']) ? '"' . $params['sender']['name'] . '" <' . $params['sender']['mail'] . '>' : '',
-            $params['contenttype'],
+            isset($params['contenttype']) ? $params['contenttype'] : 'text/plain',
         ));
 
         $result['id'] = $msgid  = $this->db->GetLastInsertID('messages');

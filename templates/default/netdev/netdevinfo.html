@@ -22,7 +22,7 @@
 	{include file="attachments.html" attachmenttype="netdevmodelid" attachmentresourceid=$netdev.modelid}
 {/block}
 {block name="transactions"}
-	{if ConfigHelper::checkConfig('phpui.logging') && ConfigHelper::checkPrivilege('transaction_logs')}
+	{if ConfigHelper::checkConfig('logs.enabled') && ConfigHelper::checkPrivilege('transaction_logs')}
 		{include file="transactions.html"}
 	{/if}
 {/block}
@@ -44,7 +44,10 @@
 	{include file="netdev/radiosectors.html"}
 {/block}
 {block name=netdevtickets}
-        {include file="netdev/netdevtickets.html"}
+	{include file="netdev/netdevtickets.html"}
+{/block}
+{block name=netdevevents}
+	{include file='netdev/netdevevents.html'}
 {/block}
 </div>
 <script type="text/javascript">

@@ -108,6 +108,7 @@
 				<TR class="highlight schematariff" data-assignment="{$tariff.id}">
 					<TD class="valign-top">
 						{icon name="money" class="drag-icon"}
+						<input type="hidden" name="form[{$tariff.id}][tariffid]" value="{$tariff.tariffid}">
 						<A href="?m=tariffinfo&id={$tariff.tariffid}" class="bold">{$tariff.name}</A>
 						{if ($tariff.flags & $smarty.const.TARIFF_FLAG_ALL_REWARD_PENALTY_FLAGS) > 0}
 							{capture assign="reward_flags"}
@@ -137,7 +138,7 @@
 						{$_SERVICETYPES[$tariff.type]}
 					</TD>
 					<TD class="text-right valign-top bold nobr">
-						{$tariff.value|string_format:"%.2f"}
+						{Localisation::smartFormatNumber($tariff.value)}
 					</TD>
 					<td class="text-right valign-top nobr">
 						<span class="tariff-view"{if $error && $formdata.aid == $tariff.id} style="display: none;"{/if}
@@ -166,8 +167,8 @@
 						</SPAN>
 						<span class="tariff-edit"{if !$error || $formdata.aid != $tariff.id} style="display: none;"{/if}>
 							<SELECT name="form[{$tariff.id}][selectable]" class="selectable selectable-edit" {tip text="Choose tag from list"}>
-								<OPTION value="0"{if !$formdata[$tariff.id].selectable} selected{/if}>{trans("<!promotionassignment>- none -")}</OPTION>
-								<OPTION value="-1"{if $formdata[$tariff.id].selectable == -1} selected{/if}>{trans("<!promotionassignment>- new -")}</OPTION>
+								<OPTION value="0"{if !$formdata[$tariff.id].selectable} selected{/if}>{trans("<!promotionassignment>— none —")}</OPTION>
+								<OPTION value="-1"{if $formdata[$tariff.id].selectable == -1} selected{/if}>{trans("<!promotionassignment>— new —")}</OPTION>
 								{foreach $schema.selections as $selid}
 								<OPTION value="{$selid}"{if $selid == $formdata[$tariff.id].selectable} selected{/if}>{$selid}</OPTION>
 								{/foreach}
@@ -187,7 +188,7 @@
 							{if !empty($tariff.data.users[$key])}
 								<i class="lms-ui-icon-user" title="{t a=$tariff.data.users_text[$key]}Modifiable by selected users:<br><strong>$a</strong>{/t}"></i>
 							{/if}
-							{if $tariff.data.value[$key] != 'NULL'}{$tariff.data.value[$key]|string_format:"%.2f"}{/if}
+							{if $tariff.data.value[$key] != 'NULL'}{Localisation::smartFormatNumber($tariff.data.value[$key])}{/if}
 							{if $tariff.data.period[$key]}({$_PERIODS[$tariff.data.period[$key]]}){/if}
 						</SPAN>
 						<span class="tariff-edit"{if !$error || $formdata.aid != $tariff.id} style="display: none;"{/if}>
@@ -202,8 +203,8 @@
 									{/foreach}
 								</SELECT>
 							</div>
-							<INPUT type="text" size="8" name="form[{$tariff.id}][value][{$key}]" class="value-edit"
-									value="{$formdata[$tariff.id].value[$key]}"
+							<INPUT type="text" size="8" name="form[{$tariff.id}][value][{$key}]" class="value-edit period_form_value"
+									value="{if isset($formdata[$tariff.id].value[$key])}{Localisation::smartFormatNumber($formdata[$tariff.id].value[$key])}{/if}"
 									{if $key}
 										{tip text="Enter subscription value for specified period"}
 									{else}
@@ -257,7 +258,7 @@
 								</div>
 								<div class="promoschema-tariff-selection-header-cell">
 									<select id="service-type" name="form[servicetype]">
-										<option value="0">{trans("- all -")}</option>
+										<option value="0">{trans("— all —")}</option>
 										{foreach $_SERVICETYPES as $type => $label}
 											<option value="{$type}"{if $formdata.servicetype == $type} selected{/if}>{$label}</option>
 										{/foreach}
@@ -293,7 +294,7 @@
 													data-tarifftags="{$tariff.tags}" data-valid="{$tariff.valid}"
 													{if !$tariff.valid} class="blend"{if !$formdata.alltariffs} style="display: none;"{/if}{/if}
 											>
-												{$tariff.name|truncate:40:"&hellip;":true} ({moneyf($tariff.value, $tariff.currency)}{if $tariff.upceil || $tariff.downceil}, {convert_to_units($tariff.downceil * $speed_unit_type, $speed_unit_aggregation_threshold, $speed_unit_type)}/{convert_to_units($tariff.upceil * $speed_unit_type, $speed_unit_aggregation_threshold, $speed_unit_type)}{/if})
+												{$tariff.name|truncate:40:"&hellip;":true} ({Utils::smartFormatMoney($tariff.value, $tariff.currency)}{if $tariff.upceil || $tariff.downceil}, {convert_to_units($tariff.downceil * $speed_unit_type, $speed_unit_aggregation_threshold, $speed_unit_type)}/{convert_to_units($tariff.upceil * $speed_unit_type, $speed_unit_aggregation_threshold, $speed_unit_type)}{/if})
 											</OPTION>
 										{/foreach}
 									</SELECT>
@@ -304,7 +305,7 @@
 									<label>
 										<input type="checkbox" id="alltariffs" name="form[alltariffs]" value="1"
 												{tip text="Check if all tariffs should be displayed" trigger="alltariffs"}
-												{if isset($formdata.alltariffs)} checked{/if}>
+												{if !empty($formdata.alltariffs)} checked{/if}>
 										{trans("show all tariffs")}
 									</label>
 								</div>
@@ -321,8 +322,8 @@
 					</TD>
 					<TD class="ftop text-right valign-top nobr">
 						<SELECT name="form[selectable]" class="selectable" {tip text="Choose tag from list"}>
-							<OPTION value="0" {if !$formdata.selectable}selected{/if}>{trans("<!promotionassignment>- none -")}</OPTION>
-							<OPTION value="-1" {if $formdata.selectable == -1}selected{/if}>{trans("<!promotionassignment>- new -")}</OPTION>
+							<OPTION value="0" {if !$formdata.selectable}selected{/if}>{trans("<!promotionassignment>— none —")}</OPTION>
+							<OPTION value="-1" {if $formdata.selectable == -1}selected{/if}>{trans("<!promotionassignment>— new —")}</OPTION>
 							{foreach $schema.selections as $selid}
 							<OPTION value="{$selid}"{if $selid == $formdata.selectable} selected{/if}>{$selid}</OPTION>
 							{/foreach}
@@ -343,7 +344,7 @@
 								{/foreach}
 							</SELECT>
 						</div>
-						<INPUT type="text" size="8" name="form[value][{$key}]" value="{$formdata.value[$key]}"
+						<INPUT type="text" size="8" class="period_form_value" id="period_form_value_{$key}" name="form[value][{$key}]" value="{$formdata.value[$key]}"
 								{if $key}
 									{tip text="Enter subscription value for specified period"}
 								{else}
@@ -501,8 +502,10 @@
 						edit.find('.selectable-edit').val($(this).attr('data-selectable'));
 					} else if ($(this).is('[data-value]')) {
 						var value = $(this).attr('data-value');
-						if (value != 'NULL') {
-							edit.find('.value-edit').val(value);
+						if (value == 'NULL') {
+							edit.find('.value-edit').val('');
+						} else {
+							edit.find('.value-edit').val(lms.utils.smartFormatNumber(value).replace(/[\.]+/, ','));
 						}
 						edit.find('.period-edit').val($(this).attr('data-period'));
 						var users = $(this).attr('data-users').split(',');
@@ -540,6 +543,14 @@
 			document.tariffs.submit();
 		});
 		return false;
+	});
+
+	$(".period_form_value").on('change', function () {
+		let elemVal = $(this).val();
+		if (elemVal.length) {
+			let value = parseFloat(elemVal.replace(/[\,]+/, '.'));
+			$(this).val(lms.utils.smartFormatNumber(value).replace(/[^0-9,\.]/g, ''));
+		}
 	});
 
 </SCRIPT>

@@ -86,7 +86,7 @@ if ($alias) {
 
     if (empty($_GET['addaccount']) && empty($_GET['delaccount'])
         && empty($_GET['addmailforward']) && empty($_GET['delmailforward'])) {
-        if (!count($alias['accounts']) && !count($alias['mailforwards'])) {
+        if (empty($alias['accounts']) && empty($alias['mailforwards'])) {
             $error['accountid'] = trans('You have to select destination account!');
             $error['mailforward'] = trans('You have to specify forward e-mail!');
         }
@@ -120,13 +120,13 @@ if ($alias) {
 
         $id = $DB->GetLastInsertId('aliases');
 
-        if (count($alias['accounts'])) {
+        if (!empty($alias['accounts'])) {
             foreach ($alias['accounts'] as $account) {
                 $DB->Execute('INSERT INTO aliasassignments (aliasid, accountid)
 					VALUES(?,?)', array($id, $account['id']));
             }
         }
-        if (count($alias['mailforwards'])) {
+        if (is_array($alias['mailforwards']) && count($alias['mailforwards'])) {
             foreach ($alias['mailforwards'] as $mailforward) {
                 $DB->Execute('INSERT INTO aliasassignments (aliasid, mail_forward)
 					VALUES(?,?)', array($id, $mailforward));
@@ -169,8 +169,8 @@ $accountlist = $DB->GetAll('SELECT passwd.id, login, domains.name AS domain
 $layout['pagetitle'] = trans('New Alias');
 
 $SESSION->add_history_entry();
-$SESSION->save('aliasaccounts', $alias['accounts']);
-$SESSION->save('aliasmailforwards', $alias['mailforwards']);
+$SESSION->save('aliasaccounts', empty($alias['accounts']) ? null : $alias['accounts']);
+$SESSION->save('aliasmailforwards', empty($alias['mailforwards']) ? null : $alias['mailforwards']);
 
 $SMARTY->assign('alias', $alias);
 $SMARTY->assign('error', $error);

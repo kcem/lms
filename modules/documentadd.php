@@ -35,6 +35,8 @@ if (isset($_POST['document'])) {
 
     $document['customerid'] = isset($_POST['customerid']) ? intval($_POST['customerid']) : intval($_POST['customer']);
 
+    $error = array();
+
     if (!$LMS->CustomerExists(intval($document['customerid']))) {
         $error['customer'] = trans('Customer not selected!');
         $error['customerid'] = trans('Customer not selected!');
@@ -81,14 +83,14 @@ if (isset($_POST['document'])) {
         }
     }
 
-    $allow_past_date = ConfigHelper::checkValue(ConfigHelper::getConfig('documents.allow_past_date', 'true'));
+    $allow_past_date = ConfigHelper::checkConfig('documents.allow_past_date', true);
     if (!$allow_past_date) {
         $today = strtotime('today');
     }
 
     if (empty($document['fromdate'])) {
         $document['fromdate'] = 0;
-    } elseif (!preg_match('/^[0-9]+$/', $document['fromdate'])) {
+    } elseif (!is_numeric($document['fromdate'])) {
         $error['fromdate'] = trans('Incorrect date format! Enter date in YYYY/MM/DD format!');
     } elseif (!$allow_past_date && $document['fromdate'] < $today) {
         die('From date can not be earlier than current date!');
@@ -96,7 +98,7 @@ if (isset($_POST['document'])) {
 
     if (empty($document['todate'])) {
         $document['todate'] = 0;
-    } elseif (!preg_match('/^[0-9]+$/', $document['todate'])) {
+    } elseif (!is_numeric($document['todate'])) {
         $error['todate'] = trans('Incorrect date format! Enter date in YYYY/MM/DD format!');
     } elseif (!$allow_past_date && $document['todate'] < $today) {
         die('To date can not be earlier than current date!');
@@ -104,13 +106,26 @@ if (isset($_POST['document'])) {
         $document['todate'] = strtotime('tomorrow', $document['todate']) - 1;
     }
 
+    if (empty($document['startdate'])) {
+        $document['startdate'] = 0;
+    } elseif (!is_numeric($document['startdate'])) {
+        $error['startdate'] = trans('Incorrect date format! Enter date in YYYY/MM/DD format!');
+    }
+    /*
+    elseif (!empty($document['fromdate']) && $document['fromdate'] > $document['startdate']) {
+        $error['startdate'] = trans('Start date can not be earlier than "from" date!');
+    } elseif ($document['startdate'] < strtotime('today')) {
+        $error['startdate'] = trans('Start date can not be earlier than current date!');
+    }
+    */
+
     if (!empty($document['todate']) && $document['fromdate'] > $document['todate']) {
         $error['todate'] = trans('Start date can\'t be greater than end date!');
     }
 
     if (empty($document['confirmdate'])) {
         $document['confirmdate'] = 0;
-    } elseif (!preg_match('/^[0-9]+$/', $document['confirmdate']) && !isset($document['closed'])) {
+    } elseif (!is_numeric($document['confirmdate']) && !isset($document['closed'])) {
         $error['confirmdate'] = trans('Incorrect date format! Enter date in YYYY/MM/DD format!');
     }
 
@@ -122,6 +137,10 @@ if (isset($_POST['document'])) {
         $selected_assignment['dateto'] = $document['todate'];
 
         $result = $LMS->ValidateAssignment($selected_assignment);
+        if (!empty($result['error'])) {
+            $error = array_merge($error, $result['error']);
+        }
+        unset($result['error']);
         extract($result);
 
         if (!$LMS->CheckSchemaModifiedValues($a)) {
@@ -134,7 +153,7 @@ if (isset($_POST['document'])) {
     $files = array();
 
     if (!isset($_GET['ajax'])) {
-        if ($document['reference']) {
+        if (isset($document['reference']) && $document['reference']) {
             $document['reference'] = $DB->GetRow('SELECT id, type, fullnumber, cdate FROM documents
 				WHERE id = ?', array($document['reference']));
         }
@@ -147,7 +166,7 @@ if (isset($_POST['document'])) {
             'customerid' => $document['customerid'],
         ));
 
-        if ($document['templ']) {
+        if (!empty($document['templ'])) {
             foreach ($documents_dirs as $doc) {
                 if (file_exists($doc . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR . $document['templ'])) {
                     $doc_dir = $doc;
@@ -161,6 +180,10 @@ if (isset($_POST['document'])) {
 
             // read template information
             include($template_dir . DIRECTORY_SEPARATOR . 'info.php');
+
+            if (isset($engine['vhosts']) && isset($engine['vhosts'][$_SERVER['HTTP_HOST']])) {
+                $engine = array_merge($engine, $engine['vhosts'][$_SERVER['HTTP_HOST']]);
+            }
 
             // call plugin
             if (!empty($engine['plugin'])) {
@@ -190,15 +213,27 @@ if (isset($_POST['document'])) {
             // run template engine
             if (file_exists($doc_dir . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR
                 . $engine['engine'] . DIRECTORY_SEPARATOR . 'engine.php')) {
+                $SMARTY->AddTemplateDir(
+                    array(
+                        'documentadd' => $doc_dir . DIRECTORY_SEPARATOR . 'templates'
+                            . DIRECTORY_SEPARATOR . $engine['name']
+                    )
+                );
                 require_once($doc_dir . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR
                     . $engine['engine'] . DIRECTORY_SEPARATOR . 'engine.php');
             } else {
+                $SMARTY->AddTemplateDir(
+                    array(
+                        'documentadd' => DOC_DIR . DIRECTORY_SEPARATOR . 'templates'
+                            . DIRECTORY_SEPARATOR . 'default'
+                    )
+                );
                 require_once(DOC_DIR . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR
                     . 'default' . DIRECTORY_SEPARATOR . 'engine.php');
             }
 
             if (!empty($output)) {
-                $file = DOC_DIR . DIRECTORY_SEPARATOR . 'tmp.file';
+                $file = tempnam(DOC_DIR, 'tmp.file');
                 $fh = fopen($file, 'w');
                 fwrite($fh, $output);
                 fclose($fh);
@@ -256,6 +291,43 @@ if (isset($_POST['document'])) {
         }
     }
 
+    $promotionattachments = array();
+    if (isset($document['assignment']['promotion-attachments']) && !empty($document['assignment']['promotion-attachments'])) {
+        $promotionattachments = array_merge($promotionattachments, $document['assignment']['promotion-attachments']);
+    }
+    if (isset($document['assignment']['promotion-schema-attachments']) && !empty($document['assignment']['promotion-schema-attachments'])) {
+        $promotionattachments = array_merge($promotionattachments, $document['assignment']['promotion-schema-attachments']);
+    }
+    $promotionattachments = Utils::filterIntegers($promotionattachments);
+    if (!empty($promotionattachments)) {
+        $promotionattachments = $DB->GetAll(
+            'SELECT *
+            FROM promotionattachments
+            WHERE id IN ?',
+            array(
+                $promotionattachments,
+            )
+        );
+        if (!empty($promotionattachments)) {
+            foreach ($promotionattachments as $attachment) {
+                $filename = STORAGE_DIR . DIRECTORY_SEPARATOR
+                    . (empty($attachment['promotionschemaid']) ? 'promotions' : 'promotionschemas')
+                    . DIRECTORY_SEPARATOR . $attachment[empty($attachment['promotionschemaid']) ? 'promotionid' : 'promotionschemaid']
+                    . DIRECTORY_SEPARATOR . $attachment['filename'];
+                if (file_exists($filename)) {
+                    $files[] = array(
+                        'tmpname' => null,
+                        'filename' => basename($filename),
+                        'name' => $filename,
+                        'type' => $attachment['contenttype'],
+                        'md5sum' => md5_file($filename),
+                        'attachmenttype' => 0,
+                    );
+                }
+            }
+        }
+    }
+
     if (empty($files) && empty($document['templ'])) {
         $error['files'] = trans('You must to specify file for upload or select document template!');
     }
@@ -267,7 +339,7 @@ if (isset($_POST['document'])) {
         }
     }
 
-    if (!$error) {
+    if (!$error && !$warning) {
         $customer = $LMS->GetCustomer($document['customerid']);
         $time = time();
 
@@ -359,6 +431,9 @@ if (isset($_POST['document'])) {
             } else {
                 $selected_assignment['datefrom'] = $from;
             }
+            if (!empty($document['startdate'])) {
+                $selected_assignment['datefrom'] = $document['startdate'];
+            }
             $selected_assignment['dateto'] = $to;
 
             if (isset($document['closed'])) {
@@ -375,12 +450,12 @@ if (isset($_POST['document'])) {
                 $selected_assignment['align-periods'] = isset($document['assignment']['align-periods']);
 
                 if (is_array($selected_assignment['sassignmentid'][$schemaid])) {
-                    $modifiedvalues = $selected_assignment['values'][$schemaid];
+                    $modifiedvalues = isset($selected_assignment['values'][$schemaid]) ? $selected_assignment['values'][$schemaid] : array();
                     $counts = $selected_assignment['counts'][$schemaid];
                     $backwardperiods = $selected_assignment['backwardperiods'][$schemaid];
                     $copy_a = $selected_assignment;
-                    $snodes = $selected_assignment['snodes'][$schemaid];
-                    $sphones = $selected_assignment['sphones'][$schemaid];
+                    $snodes = isset($selected_assignment['snodes'][$schemaid]) ? $selected_assignment['snodes'][$schemaid] : array();
+                    $sphones = isset($selected_assignment['sphones'][$schemaid]) ? $selected_assignment['sphones'][$schemaid] : array();
 
                     foreach ($selected_assignment['sassignmentid'][$schemaid] as $label => $v) {
                         if (!$v) {
@@ -391,8 +466,8 @@ if (isset($_POST['document'])) {
                         $copy_a['modifiedvalues'] = isset($modifiedvalues[$label][$v]) ? $modifiedvalues[$label][$v] : array();
                         $copy_a['count'] = $counts[$label];
                         $copy_a['backwardperiod'] = $backwardperiods[$label][$v];
-                        $copy_a['nodes'] = $snodes[$label];
-                        $copy_a['phones'] = $sphones[$label];
+                        $copy_a['nodes'] = isset($snodes[$label]) ? $snodes[$label] : array();
+                        $copy_a['phones'] = isset($sphones[$label]) ? $sphones[$label] : array();
                         $tariffid = $LMS->AddAssignment($copy_a);
                     }
                 }
@@ -401,14 +476,31 @@ if (isset($_POST['document'])) {
 
         $DB->CommitTrans();
 
-        if ($LMS->DocumentExists($docid) && !empty($document['confirmdate'])) {
-            $document['id'] = $docid;
-            $LMS->NewDocumentCustomerNotifications($document);
+        if ($LMS->DocumentExists($docid)) {
+            $hook_data = $LMS->executeHook(
+                'documentadd_after_submit',
+                array(
+                    'docid' => $docid,
+                    'document' => $document
+                )
+            );
+            $document = $hook_data['document'];
+
+            if (isset($document['closed'])) {
+                $LMS->CommitDocuments(array($docid), false, false);
+            }
+
+            if (!empty($document['confirmdate'])) {
+                $document['id'] = $docid;
+                $document['fullnumber'] = $fullnumber;
+                $LMS->NewDocumentCustomerNotifications($document);
+            }
         }
 
         if (!isset($document['reuse'])) {
             if (isset($_GET['print'])) {
                 $SESSION->save('documentprint', $docid);
+                $SESSION->save('document-with-attachments', isset($_POST['with-attachments']));
             }
 
             $SESSION->redirect('?m=documentlist&c=' . $document['customerid']);
@@ -426,17 +518,41 @@ if (isset($_POST['document'])) {
     }
 } else {
     $document['customerid'] = isset($_GET['cid']) ? intval($_GET['cid']) : '';
-    $document['type'] = isset($_GET['type']) ? intval($_GET['type']) : '';
+    if (isset($_GET['type'])) {
+        $document['type'] = intval($_GET['type']);
+    } else {
+        $document['type'] = '';
 
-    $default_assignment_invoice = ConfigHelper::getConfig('phpui.default_assignment_invoice');
-    if (!empty($default_assignment_invoice)) {
-        if (preg_match('/^[0-9]+$/', $default_assignment_invoice)) {
-            $document['assignment']['invoice'] = $default_assignment_invoice;
-        } elseif (ConfigHelper::checkValue($default_assignment_invoice)) {
+        $default_type = ConfigHelper::getConfig('documents.default_type', '', true);
+        if (strlen($default_type)) {
+            $doctype_aliases_flipped = array_flip($DOCTYPE_ALIASES);
+            if (ctype_digit($default_type)) {
+                if (isset($DOCTYPE_ALIASES[$default_type])) {
+                    $document['type'] = $default_type;
+                }
+            } else {
+                if (isset($doctype_aliases_flipped[$default_type])) {
+                    $document['type'] = $doctype_aliases_flipped[$default_type];
+                }
+            }
+        }
+    }
+
+    $default_document_type = ConfigHelper::getConfig(
+        'assignments.default_document_type',
+        ConfigHelper::getConfig('phpui.default_assignment_invoice')
+    );
+    if (!empty($default_document_type)) {
+        if (preg_match('/^[0-9]+$/', $default_document_type)) {
+            $document['assignment']['invoice'] = $default_document_type;
+        } elseif (ConfigHelper::checkValue($default_document_type)) {
             $document['assignment']['invoice'] = DOC_INVOICE;
         }
     }
-    $default_assignment_settlement = ConfigHelper::getConfig('phpui.default_assignment_settlement');
+    $default_assignment_settlement = ConfigHelper::getConfig(
+        'assignments.default_begin_period_settlement',
+        ConfigHelper::getConfig('phpui.default_assignment_settlement')
+    );
     if (!empty($default_assignment_settlement)) {
         if (preg_match('/^[0-9]+$/', $default_assignment_settlement)) {
             $document['assignment']['settlement'] = $default_assignment_settlement;
@@ -444,21 +560,39 @@ if (isset($_POST['document'])) {
             $document['assignment']['settlement'] = 1;
         }
     }
-    $document['assignment']['last-settlement'] = ConfigHelper::checkConfig('phpui.default_assignment_last_settlement');
-    $document['assignment']['align-periods'] = ConfigHelper::checkValue(ConfigHelper::getConfig('phpui.default_assignment_align_periods', true));
-    $default_assignment_period = ConfigHelper::getConfig('phpui.default_assignment_period');
+    $document['assignment']['last-settlement'] = ConfigHelper::checkConfig(
+        'assignments.default_end_period_settlement',
+        ConfigHelper::checkConfig('phpui.default_assignment_last_settlement')
+    );
+    $document['assignment']['align-periods'] = ConfigHelper::checkConfig(
+        'assignments.default_align_periods',
+        ConfigHelper::checkConfig('phpui.default_assignment_align_periods', true)
+    );
+    $default_assignment_period = ConfigHelper::getConfig(
+        'assignments.default_period',
+        ConfigHelper::getConfig('phpui.default_assignment_period')
+    );
     if (!empty($default_assignment_period)) {
         $document['assignment']['period'] = $default_assignment_period;
     }
-    $default_assignment_at = ConfigHelper::getConfig('phpui.default_assignment_at');
+    $default_assignment_at = ConfigHelper::getConfig(
+        'assignments.default_at',
+        ConfigHelper::getConfig('phpui.default_assignment_at')
+    );
     if (!empty($default_assignment_at)) {
         $document['assignment']['at'] = $default_assignment_at;
     }
 
     $document['assignment']['check_all_terminals'] =
-        ConfigHelper::checkConfig('phpui.promotion_schema_all_terminal_check');
+        ConfigHelper::checkConfig(
+            'promotions.schema_all_terminal_check',
+            ConfigHelper::checkConfig('phpui.promotion_schema_all_terminal_check')
+        );
 
-    $default_existing_assignment_operation = ConfigHelper::getConfig('phpui.default_existing_assignment_operation', 'keep');
+    $default_existing_assignment_operation = ConfigHelper::getConfig(
+        'assignments.default_existing_operation',
+        ConfigHelper::getConfig('phpui.default_existing_assignment_operation', 'keep')
+    );
     $existing_assignment_operation_map = array(
         'keep' => EXISTINGASSIGNMENT_KEEP,
         'suspend' => EXISTINGASSIGNMENT_SUSPEND,
@@ -519,6 +653,27 @@ if (isset($document['customerid'])) {
     $promotions = $numberplans = null;
 }
 
+$promotionattachments = array();
+foreach ($promotions as $promotionid => $promotion) {
+    foreach ($promotion['schemas'] as $schemaid => $schema) {
+        if (!isset($promotionattachments[$schemaid])) {
+            $promotionattachments[$schemaid] = array(
+                'promotions' => array(),
+                'promotionschemas' => array(),
+            );
+        }
+        $promotionattachments[$schemaid]['promotions'] = array_merge(
+            $promotionattachments[$schemaid]['promotions'],
+            $promotion['attachments']
+        );
+        $promotionattachments[$schemaid]['promotionschemas'] = array_merge(
+            $promotionattachments[$schemaid]['promotionschemas'],
+            $schema['attachments']
+        );
+    }
+}
+$SMARTY->assign('promotionattachments', $promotionattachments);
+
 $SMARTY->assign('promotions', $promotions);
 $SMARTY->assign('tariffs', $LMS->GetTariffs());
 $defaultTaxIds = $LMS->GetTaxes(null, null, true);
@@ -531,6 +686,12 @@ if (is_array($defaultTaxIds)) {
 $SMARTY->assign('defaultTaxId', $defaultTaxId);
 $SMARTY->assign('numberplanlist', $numberplans);
 // --- promotion support
+
+$hook_data = array(
+    'document' => $document,
+);
+$hook_data = $LMS->ExecuteHook('documentadd_init', $hook_data);
+$document = $hook_data['document'];
 
 $SMARTY->assign('error', $error);
 $SMARTY->assign('docrights', $rights);

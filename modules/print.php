@@ -3,7 +3,7 @@
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2017 LMS Developers
+ *  (C) Copyright 2001-2022 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -26,6 +26,11 @@
 
 if (!ConfigHelper::checkConfig('privileges.superuser') && !ConfigHelper::checkConfig('privileges.reports')) {
     access_denied();
+}
+
+$report_type = ConfigHelper::getConfig('phpui.report_type');
+if (empty($report_type)) {
+    $report_type = '';
 }
 
 $type = isset($_GET['type']) ? $_GET['type'] : '';
@@ -135,7 +140,7 @@ switch ($type) {
         }
 
         $SMARTY->assign('balancelist', $list);
-        if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+        if (strtolower($report_type) == 'pdf') {
             $output = $SMARTY->fetch('print/printcustomerbalance.html');
             html2pdf($output, trans('Reports'), $layout['pagetitle']);
         } else {
@@ -153,11 +158,23 @@ switch ($type) {
         $from = $_POST['balancefrom'];
         $to = $_POST['balanceto'];
         $net = intval($_POST['network']);
-        $group = intval($_POST['customergroup']);
+        if (!empty($_POST['customergroup'])) {
+            $group = $_POST['customergroup'];
+            if (!is_array($group)) {
+                $group = array($group);
+            }
+            $group = Utils::filterIntegers($group);
+        } else {
+            $group = array();
+        }
         $division = intval($_POST['division']);
         $source = intval($_POST['source']);
-        $types = isset($_POST['types']) ? $_POST['types'] : null;
+        $types = isset($_POST['types']) ? Utils::filterIntegers($_POST['types']) : array();
         $docs = $_POST['docs'];
+
+        $hideid = isset($_POST['printcustomerhideid']);
+        $hidessnten = isset($_POST['printcustomerhidessnten']);
+        $hideaddress = isset($_POST['printcustomerhideaddress']);
 
         // date format 'yyyy/mm/dd'
         if ($from) {
@@ -183,7 +200,8 @@ switch ($type) {
             $layout['pagetitle'] = trans('Balance Sheet ($a to $b)', ($from ? $from : ''), $to);
         }
 
-        if ($types) {
+        $typetxt = array();
+        if (!empty($types)) {
             foreach ($types as $tt) {
                 switch ($tt) {
                     case 1:
@@ -201,54 +219,69 @@ switch ($type) {
                 }
             }
 
-            $typewhere = ' AND ('.implode(' OR ', $typewhere).')';
+            $typewhere = ' AND (' . implode(' OR ', $typewhere) . ')';
         }
 
-        $customerslist = $DB->GetAllByKey('SELECT id, '.$DB->Concat('UPPER(lastname)', "' '", 'name').' AS customername FROM customers', 'id');
+        $customerslist = $DB->GetAllByKey('SELECT id, ' . $DB->Concat('UPPER(lastname)', "' '", 'name') . ' AS customername FROM customers', 'id');
 
         if (isset($date['from'])) {
             $lastafter = $DB->GetOne(
-                'SELECT SUM(CASE WHEN c.customerid IS NOT NULL AND type=0 THEN 0 ELSE value * c.currencyvalue END)
-					FROM cash c '
-                    .($group ? 'LEFT JOIN vcustomerassignments a ON (c.customerid = a.customerid) ' : '')
-                    .'WHERE time<?'
-                    .($docs ? ($docs == 'documented' ? ' AND c.docid IS NOT NULL' : ' AND c.docid IS NULL') : '')
-                    .($source ? ' AND c.sourceid = '.intval($source) : '')
-                    .($group ? ' AND a.customergroupid = '.$group : '')
-                    .($net ? ' AND EXISTS (SELECT 1 FROM vnodes WHERE c.customerid = ownerid AND ((ipaddr > '.$net['address'].' AND ipaddr < '.$net['broadcast'].') OR (ipaddr_pub > '.$net['address'].' AND ipaddr_pub < '.$net['broadcast'].')))' : '')
-                    .($division ? ' AND EXISTS (SELECT 1 FROM customers WHERE id = c.customerid AND divisionid = '.$division.')' : '')
-                    .($types ? $typewhere : '')
-                    .' AND NOT EXISTS (
-			        		SELECT 1 FROM vcustomerassignments a
-						JOIN excludedgroups e ON (a.customergroupid = e.customergroupid)
-						WHERE e.userid = lms_current_user() AND a.customerid = c.customerid)',
-                array($date['from'])
+                'SELECT
+                    SUM(CASE WHEN c.customerid IS NOT NULL AND c.type = 0 THEN 0 ELSE c.value * c.currencyvalue END)
+                FROM cash c
+                JOIN customerview ON customerview.id = c.customerid
+                WHERE c.time < ?'
+                . (empty($group) ? '' : ' AND EXISTS (SELECT 1 FROM vcustomerassignments a WHERE a.customerid = c.customerid AND a.customergroupid IN (' . implode(',', $group) . '))')
+                . ($docs ? ($docs == 'documented' ? ' AND c.docid IS NOT NULL' : ' AND c.docid IS NULL') : '')
+                . ($source ? ' AND c.sourceid = ' . intval($source) : '')
+                . ($net ? ' AND EXISTS (SELECT 1 FROM vnodes WHERE c.customerid = ownerid AND ((ipaddr > ' . $net['address'] . ' AND ipaddr < ' . $net['broadcast'] . ') OR (ipaddr_pub > ' . $net['address'] . ' AND ipaddr_pub < ' . $net['broadcast'] . ')))' : '')
+                . ($division ? ' AND customerview.divisionid = ' . $division : '')
+                . (empty($types) ? '' : $typewhere),
+                array(
+                    $date['from'],
+                )
             );
         } else {
             $lastafter = 0;
         }
 
-        if ($balancelist = $DB->GetAll('SELECT c.id AS id, time, userid,
-                    c.value AS value, c.currency, c.currencyvalue,
-					taxes.label AS taxlabel, c.customerid, comment, c.type AS type,
-                    cs.name AS sourcename
-					FROM cash c
-					LEFT JOIN cashsources cs ON cs.id = c.sourceid
-					LEFT JOIN taxes ON (taxid = taxes.id) '
-                    .($group ? 'LEFT JOIN vcustomerassignments a ON (c.customerid = a.customerid)  ' : '')
-                    .'WHERE time <= ? '
-                    .($docs ? ($docs == 'documented' ? ' AND c.docid IS NOT NULL' : ' AND c.docid IS NULL') : '')
-                    .($source ? ($source == -1 ? ' AND c.sourceid IS NULL' : ' AND c.sourceid = '.intval($source)) : '')
-                    .(isset($date['from']) ? ' AND time >= '.$date['from'] : '')
-                    .($group ? ' AND a.customergroupid = '.$group : '')
-                    .($net ? ' AND EXISTS (SELECT 1 FROM vnodes WHERE c.customerid = ownerid AND ((ipaddr > '.$net['address'].' AND ipaddr < '.$net['broadcast'].') OR (ipaddr_pub > '.$net['address'].' AND ipaddr_pub < '.$net['broadcast'].')))' : '')
-                    .($division ? ' AND EXISTS (SELECT 1 FROM customers WHERE id = c.customerid AND divisionid = '.$division.')' : '')
-                    .($types ? $typewhere : '')
-                    .' AND NOT EXISTS (
-			        		SELECT 1 FROM vcustomerassignments a
-						JOIN excludedgroups e ON (a.customergroupid = e.customergroupid)
-						WHERE e.userid = lms_current_user() AND a.customerid = c.customerid)'
-                    .' ORDER BY time ASC', array($date['to']))) {
+        if ($balancelist = $DB->GetAll(
+            'SELECT
+                c.id AS id,
+                c.time,
+                c.userid,
+                customerview.type AS ctype,
+                COALESCE(d.ssn, customerview.ssn) AS ssn,
+                COALESCE(d.ten, customerview.ten) AS ten,
+                COALESCE(d.address, customerview.address) AS address,
+                COALESCE(d.zip, customerview.zip) AS zip,
+                COALESCE(d.city, customerview.city) AS city,
+                c.value AS value,
+                c.currency,
+                c.currencyvalue,
+                taxes.label AS taxlabel,
+                c.customerid,
+                c.comment,
+                c.type AS type,
+                cs.name AS sourcename
+            FROM cash c
+            JOIN customerview ON customerview.id = c.customerid
+            LEFT JOIN documents d ON d.id = c.docid
+            LEFT JOIN cashsources cs ON cs.id = c.sourceid
+            LEFT JOIN taxes ON taxid = taxes.id
+            WHERE time <= ?'
+            . (empty($group) ? '' : ' AND EXISTS (SELECT 1 FROM vcustomerassignments a WHERE a.customerid = c.customerid AND a.customergroupid IN (' . implode(',', $group) . '))')
+            . ($docs ? ($docs == 'documented' ? ' AND c.docid IS NOT NULL' : ' AND c.docid IS NULL') : '')
+            . ($source ? ($source == -1 ? ' AND c.sourceid IS NULL' : ' AND c.sourceid = ' . intval($source)) : '')
+            . (isset($date['from']) ? ' AND c.time >= ' . $date['from'] : '')
+            . ($net ? ' AND EXISTS (SELECT 1 FROM vnodes WHERE c.customerid = ownerid AND ((ipaddr > ' . $net['address'] . ' AND ipaddr < ' . $net['broadcast'] . ') OR (ipaddr_pub > ' . $net['address'] . ' AND ipaddr_pub < ' . $net['broadcast'] . ')))' : '')
+            . ($division ? ' AND customerview.divisionid = ' . $division : '')
+            . (empty($types) ? '' : $typewhere)
+            . ' ORDER BY c.time ASC',
+            array(
+                $date['to'],
+            )
+        )) {
             $listdata['income'] = 0;
             $listdata['expense'] = 0;
             $listdata['liability'] = 0;
@@ -256,8 +289,8 @@ switch ($type) {
 
             foreach ($balancelist as $idx => $row) {
                 if ($user) {
-                    if ($row['userid']!=$user) {
-                        if ($row['value']>0 || !$row['customerid']) {  // skip cust. covenants
+                    if ($row['userid'] != $user) {
+                        if ($row['value'] > 0 || !$row['customerid']) {  // skip cust. covenants
                             $lastafter += $row['value'];
                         }
                         unset($balancelist[$idx]);
@@ -265,19 +298,12 @@ switch ($type) {
                     }
                 }
 
-                $list[$x]['value'] = $row['value'];
-                $list[$x]['currency'] = $row['currency'];
-                $list[$x]['currencyvalue'] = $row['currencyvalue'];
-                $list[$x]['taxlabel'] = $row['taxlabel'];
-                $list[$x]['time'] = $row['time'];
-                $list[$x]['sourcename'] = $row['sourcename'];
-                $list[$x]['comment'] = $row['comment'];
-                $list[$x]['customerid'] = $row['customerid'];
-                $list[$x]['customername'] = $customerslist[$row['customerid']]['customername'];
+                $list[$x] = $row;
+                $list[$x]['customername'] = empty($row['customerid']) ? '' : $customerslist[$row['customerid']]['customername'];
 
-                if ($row['customerid'] && $row['type']==0) {
-                            // customer covenant
-                        $list[$x]['after'] = $lastafter;
+                if (!empty($row['customerid']) && empty($row['type'])) {
+                    // customer covenant
+                    $list[$x]['after'] = $lastafter;
                     $list[$x]['covenant'] = true;
                     $listdata['liability'] -= $row['value'] * $row['currencyvalue'];
                 } else {
@@ -285,9 +311,10 @@ switch ($type) {
                     $list[$x]['after'] = $lastafter + $list[$x]['value'] * $row['currencyvalue'];
 
                     if ($row['value'] > 0) {
-                            //income
+                        //income
                         $listdata['income'] += $list[$x]['value'] * $row['currencyvalue'];
-                    } else { //expense
+                    } else {
+                        //expense
                         $listdata['expense'] -= $list[$x]['value'] * $row['currencyvalue'];
                     }
                 }
@@ -306,11 +333,12 @@ switch ($type) {
         if ($net) {
             $SMARTY->assign('net', $net['name']);
         }
-        if ($types) {
-            $SMARTY->assign('types', implode(', ', $typetxt));
-        }
-        if ($group) {
-            $SMARTY->assign('group', $DB->GetOne('SELECT name FROM customergroups WHERE id = ?', array($group)));
+
+        $SMARTY->assign('types', array_flip(empty($types) ? array(1, 2, 3) : $types));
+        $SMARTY->assign('typetxt', implode(', ', $typetxt));
+
+        if (!empty($group)) {
+            $SMARTY->assign('groups', $DB->GetCol('SELECT name FROM customergroups WHERE id IN ? ORDER BY name', array($group)));
         }
         if ($division) {
             $SMARTY->assign('division', $DB->GetOne('SELECT name FROM divisions WHERE id = ?', array($division)));
@@ -319,7 +347,9 @@ switch ($type) {
             $SMARTY->assign('source', $DB->GetOne('SELECT name FROM cashsources WHERE id = ?', array($source)));
         }
 
-        if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+        $SMARTY->assign(compact('hideid', 'hidessnten', 'hideaddress'));
+
+        if (strtolower($report_type) == 'pdf') {
             $output = $SMARTY->fetch('print/printbalancelist.html');
             html2pdf($output, trans('Reports'), $layout['pagetitle']);
         } else {
@@ -372,7 +402,7 @@ switch ($type) {
         );
 
         $SMARTY->assign('incomelist', $incomelist);
-        if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+        if (strtolower($report_type) == 'pdf') {
             $output = $SMARTY->fetch('print/printincomereport.html');
             html2pdf($output, trans('Reports'), $layout['pagetitle']);
         } else {
@@ -422,7 +452,7 @@ switch ($type) {
             $SMARTY->assign('source', $DB->GetOne('SELECT name FROM cashsources WHERE id = ?', array($source)));
         }
         $SMARTY->assign('importlist', $importlist);
-        if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+        if (strtolower($report_type) == 'pdf') {
             $output = $SMARTY->fetch('print/printimportlist.html');
             html2pdf($output, trans('Reports'), $layout['pagetitle']);
         } else {
@@ -467,22 +497,25 @@ switch ($type) {
 
         $layout['pagetitle'] = trans('Invoices');
 
-        header('Location: ?m=invoice&fetchallinvoices=1' . (isset($_GET['jpk']) ? '&jpk=' . $_GET['jpk'] : '')
-            . (isset($_GET['jpk_format']) ? '&jpk_format=' . $_GET['jpk_format'] : '')
-            .$type
-            .'&from='.$date['from']
-            .'&to='.$date['to']
-            .(!empty($_POST['einvoice']) ? '&einvoice=' . intval($_POST['einvoice']) : '')
-            .(!empty($_POST['division']) ? '&divisionid='.intval($_POST['division']) : '')
-            .(!empty($_POST['customer']) ? '&customerid='.intval($_POST['customer']) : '')
-            .(!empty($_POST['group']) && is_array($_POST['group']) ? '&groupid[]='
-                . implode('&groupid[]=', Utils::filterIntegers($_POST['group'])) : '')
-            .(!empty($_POST['customer_type']) ? '&customertype='.intval($_POST['customer_type']) : '')
-            .(!empty($_POST['numberplan']) && is_array($_POST['numberplan']) ? '&numberplanid[]='
-                . implode('&numberplanid[]=', Utils::filterIntegers($_POST['numberplan'])) : '')
-            .(!empty($_POST['groupexclude']) ? '&groupexclude=1' : '')
-            .(!empty($_POST['autoissued']) ? '&autoissued=1' : '')
-            .(!empty($_POST['manualissued']) ? '&manualissued=1' : ''));
+        header(
+            'Location: ?m=invoice&fetchallinvoices=1' . (isset($_GET['jpk']) ? '&jpk=' . $_GET['jpk'] : '')
+                . (isset($_GET['jpk_format']) ? '&jpk_format=' . $_GET['jpk_format'] : '')
+                .$type
+                .'&from='.$date['from']
+                .'&to='.$date['to']
+                .(!empty($_POST['einvoice']) ? '&einvoice=' . intval($_POST['einvoice']) : '')
+                .(!empty($_POST['division']) ? '&divisionid='.intval($_POST['division']) : '')
+                .(!empty($_POST['customer']) ? '&customerid='.intval($_POST['customer']) : '')
+                .(!empty($_POST['group']) && is_array($_POST['group']) ? '&groupid[]='
+                    . implode('&groupid[]=', Utils::filterIntegers($_POST['group'])) : '')
+                . (isset($_POST['customer_type']) ? '&customertype=' . intval($_POST['customer_type']) : '')
+                .(!empty($_POST['numberplan']) && is_array($_POST['numberplan']) ? '&numberplanid[]='
+                    . implode('&numberplanid[]=', Utils::filterIntegers($_POST['numberplan'])) : '')
+                .(!empty($_POST['groupexclude']) ? '&groupexclude=1' : '')
+                .(!empty($_POST['autoissued']) ? '&autoissued=1' : '')
+                .(!empty($_POST['manualissued']) ? '&manualissued=1' : '')
+                . (isset($_POST['related-documents']) ? '&related-documents=1' : '')
+        );
         break;
 
     case 'transferforms':
@@ -512,7 +545,7 @@ switch ($type) {
                     $date['from'] = mktime(0, 0, 0, $month, $day, $year);
                 } else {
                     $from = date('Y/m/d', time());
-                    $date['from'] = mktime(0, 0, 0); //pocz�tek dnia dzisiejszego
+                    $date['from'] = mktime(0, 0, 0); //początek dnia dzisiejszego
                 }
 
                 $_GET['from'] = $date['from'];
@@ -525,7 +558,7 @@ switch ($type) {
 
                 break;
             case 2:
-                $balance = $_POST['balance'] ? $_POST['balance'] : 0;
+                $balance = isset($_POST['balance']) && strlen($_POST['balance']) ? floatval($_POST['balance']) : null;
                 $customer = isset($_POST['customer']) ? intval($_POST['customer']) : 0;
                 $group = isset($_POST['customergroup']) ? intval($_POST['customergroup']) : 0;
                 $exclgroup = isset($_POST['groupexclude']) ? 1 : 0;
@@ -549,6 +582,10 @@ switch ($type) {
         } else {
             $reportday = time();
             $today = mktime(0, 0, 0);
+        }
+
+        if (isset($_POST['period']) && $_POST['period'] != '') {
+            $period = intval($_POST['period']);
         }
 
         $layout['pagetitle'] = trans('Liability Report on $a', date('Y/m/d', $reportday));
@@ -596,6 +633,8 @@ switch ($type) {
 
         $reportlist = array();
         if ($taxes = $LMS->GetTaxes($reportday, $reportday)) {
+            $total = array();
+
             foreach ($taxes as $taxidx => $tax) {
                 $list1 = $DB->GetAllByKey(
                     'SELECT a.customerid AS id, '.$DB->Concat('UPPER(lastname)', "' '", 'c.name').' AS customername, '
@@ -628,6 +667,7 @@ switch ($type) {
                         AND t.taxid=?
                         AND c.deleted=0
                         AND a.datefrom <= ? AND (a.dateto >= ? OR a.dateto = 0)
+                        ' . (isset($period) ? ' AND a.period = ' . $period : '') . '
                         AND ((a.period='.DISPOSABLE.' AND a.at=?)
                             OR (a.period='.WEEKLY.'. AND a.at=?)
                             OR (a.period='.MONTHLY.' AND a.at=?)
@@ -660,6 +700,7 @@ switch ($type) {
                         AND l.taxid=?
                         AND c.deleted=0
                         AND a.datefrom <= ? AND (a.dateto>=? OR a.dateto=0)
+                        ' . (isset($period) ? ' AND a.period = ' . $period : '') . '
                         AND ((a.period='.DISPOSABLE.' AND a.at=?)
                             OR (a.period='.WEEKLY.'. AND a.at=?)
                             OR (a.period='.MONTHLY.' AND a.at=?)
@@ -715,17 +756,18 @@ switch ($type) {
 
             switch ($order) {
                 case 'customername':
+                    $table = array();
                     foreach ($reportlist as $idx => $row) {
                         $table['idx'][] = $idx;
                         $table['customername'][] = $row['customername'];
                     }
-                    if (is_array($table)) {
+                    if (!empty($table)) {
                         array_multisort($table['customername'], ($direction == 'desc' ? SORT_DESC : SORT_ASC), $table['idx']);
                         foreach ($table['idx'] as $idx) {
                             $tmplist[] = $reportlist[$idx];
                         }
                     }
-                    $reportlist = $tmplist;
+                    $reportlist = empty($tmplist) ? array() : $tmplist;
                     break;
                 default:
                     foreach ($reportlist as $idx => $row) {
@@ -748,7 +790,7 @@ switch ($type) {
             $SMARTY->assign('taxescount', count($taxes));
         }
 
-        if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+        if (strtolower($report_type) == 'pdf') {
             $output = $SMARTY->fetch('print/printliabilityreport.html');
             html2pdf($output, trans('Reports'), $layout['pagetitle']);
         } else {
@@ -761,23 +803,23 @@ switch ($type) {
             access_denied();
         }
 
-        if ($_POST['from']) {
+        if (!empty($_POST['from'])) {
             list($year, $month, $day) = explode('/', $_POST['from']);
             $from = mktime(0, 0, 0, $month, $day, $year);
         } else {
             $from = mktime(0, 0, 0, date('m'), date('d'), date('Y'));
         }
 
-        if ($_POST['to']) {
+        if (!empty($_POST['to'])) {
             list($year, $month, $day) = explode('/', $_POST['to']);
             $to = mktime(23, 59, 59, $month, $day, $year);
         } else {
             $to = mktime(23, 59, 59, date('m'), date('d'), date('Y'));
         }
 
-        $registry = intval($_POST['registry']);
-        $user = intval($_POST['user']);
-        $group = intval($_POST['group']);
+        $registry = isset($_POST['registry']) ? intval($_POST['registry']) : 0;
+        $user = isset($_POST['user']) ? intval($_POST['user']) : 0;
+        $group = isset($_POST['group']) ? intval($_POST['group']) : 0;
         $where = '';
 
         if ($registry) {
@@ -912,13 +954,13 @@ switch ($type) {
             // (summaries and page size calculations)
             $maxrows = $rows * 2;   // dwie linie na rekord
             $counter = $maxrows;
-            $rows = 0;      // rzeczywista liczba rekord�w na stronie
+            $rows = 0;      // rzeczywista liczba rekordów na stronie
             $i = 1;
             $x = 1;
 
             foreach ($list as $row) {
-                // tutaj musimy troch� pokombinowa�, bo liczba
-                // rekord�w na stronie b�dzie zmienna
+                // tutaj musimy trochę pokombinować, bo liczba
+                // rekordów na stronie będzie zmienna
                 $tmp = is_array($row['title']) ? count($row['title']) : 2;
                 $counter -= max($tmp, 2);
                 if ($counter<0) {
@@ -930,9 +972,15 @@ switch ($type) {
                 $rows++;
                 $page = $x;
 
-                if ($row['value']>0) {
+                if ($row['value'] > 0) {
+                    if (!isset($totals[$page]['income'])) {
+                        $totals[$page]['income'] = 0;
+                    }
                     $totals[$page]['income'] += $row['value'] * $row['currencyvalue'];
                 } else {
+                    if (!isset($totals[$page]['expense'])) {
+                        $totals[$page]['expense'] = 0;
+                    }
                     $totals[$page]['expense'] += -$row['value'] * $row['currencyvalue'];
                 }
 
@@ -942,23 +990,24 @@ switch ($type) {
             foreach ($totals as $page => $t) {
                 $pages[] = $page;
 
-                $totals[$page]['totalincome'] = $totals[$page-1]['totalincome'] + $t['income'];
-                $totals[$page]['totalexpense'] = $totals[$page-1]['totalexpense'] + $t['expense'];
-                $totals[$page]['rowstart'] = $totals[$page-1]['rowstart'] + $totals[$page-1]['rows'];
+                $totals[$page]['totalincome'] = (isset($totals[$page - 1]['totalincome']) ? $totals[$page - 1]['totalincome'] : 0) + $t['income'];
+                $totals[$page]['totalexpense'] = (isset($totals[$page - 1]['totalexpense']) ? $totals[$page - 1]['totalexpense'] : 0)
+                    + (isset($t['expense']) ? $t['expense'] : 0);
+                $totals[$page]['rowstart'] = isset($totals[$page - 1]) ? $totals[$page - 1]['rowstart'] + $totals[$page - 1]['rows'] : 0;
             }
 
             $SMARTY->assign('pages', $pages);
             $SMARTY->assign('totals', $totals);
             $SMARTY->assign('pagescount', count($pages));
             $SMARTY->assign('reccount', count($list));
-            if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+            if (strtolower($report_type) == 'pdf') {
                 $output = $SMARTY->fetch('print/printreceiptlist-ext.html');
                 html2pdf($output, trans('Reports'), $layout['pagetitle']);
             } else {
                 $SMARTY->display('print/printreceiptlist-ext.html');
             }
         } else {
-            if (strtolower(ConfigHelper::getConfig('phpui.report_type')) == 'pdf') {
+            if (strtolower($report_type) == 'pdf') {
                 $output = $SMARTY->fetch('print/printreceiptlist.html');
                 html2pdf($output, trans('Reports'), $layout['pagetitle']);
             } else {
@@ -985,6 +1034,8 @@ switch ($type) {
         $SMARTY->assign('divisions', $LMS->GetDivisions());
         $SMARTY->assign('sourcelist', $DB->GetAll('SELECT id, name FROM cashsources ORDER BY name'));
         $SMARTY->assign('printmenu', 'finances');
+
+        $SMARTY->assign('invprojects', $LMS->GetProjects());
 
         $SMARTY->display('print/printindex.html');
 

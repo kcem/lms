@@ -67,12 +67,16 @@ if (!isset($_POST['xjxfun'])) {                  // xajax was called and handled
 
     include(MODULES_DIR . DIRECTORY_SEPARATOR . 'attachments.php');
 
+    $SMARTY->assign('netdevevents', $LMS->GetEventList(array('netdevid' => $id)));
+
     $netdevconnected = $LMS->GetNetDevConnectedNames($id);
     $netcomplist = $LMS->GetNetdevLinkedNodes($id);
     $netdevlist = $LMS->GetNotConnectedDevices($id);
 
     if ($netdev['ports'] > $netdev['takenports']) {
         $nodelist = $LMS->GetUnlinkedNodes();
+    } else {
+        $nodelist = array();
     }
     $netdevips = $LMS->GetNetDevIPs($id);
 
@@ -104,13 +108,15 @@ if (!isset($_POST['xjxfun'])) {                  // xajax was called and handled
     $queue = $LMS->GetQueueContents(array('netdevids' => $id, 'short'=> 1));
 
     $start = 0;
-    $pagelimit = ConfigHelper::getConfig('phpui.ticketlist_pagelimit', $queue['total']);
+    $pagelimit = ConfigHelper::getConfig(
+        'rt.ticketlist_pagelimit',
+        ConfigHelper::getConfig('phpui.ticketlist_pagelimit', isset($queue['total']) ? $queue['total'] : null)
+    );
 
     $SMARTY->assign('netdev', $netdev);
     $SMARTY->assign('start', $start);
     $SMARTY->assign('pagelimit', $pagelimit);
     $SMARTY->assign('queue', $queue);
-    $SMARTY->assign('queue_count', $queue_count);
     $SMARTY->assign('queue_netdevid', $id);
     $SMARTY->assign('objectid', $netdev['id']);
     $SMARTY->assign('restnetdevlist', $netdevlist);
@@ -121,9 +127,28 @@ if (!isset($_POST['xjxfun'])) {                  // xajax was called and handled
     $SMARTY->assign('devlinktype', $SESSION->get('devlinktype'));
     $SMARTY->assign('devlinktechnology', $SESSION->get('devlinktechnology'));
     $SMARTY->assign('devlinkspeed', $SESSION->get('devlinkspeed'));
-    $SMARTY->assign('nodelinktype', $SESSION->get('nodelinktype'));
-    $SMARTY->assign('nodelinktechnology', $SESSION->get('nodelinktechnology'));
-    $SMARTY->assign('nodelinkspeed', $SESSION->get('nodelinkspeed'));
+
+    if ($SESSION->is_set('nodelinktype')) {
+        $nodelinktype = $SESSION->get('nodelinktype');
+    } else {
+        $nodelinktype = intval(ConfigHelper::getConfig('phpui.default_linktype', LINKTYPE_WIRE));
+    }
+    $SMARTY->assign('nodelinktype', $nodelinktype);
+
+    if ($SESSION->is_set('nodelinktechnology')) {
+        $nodelinktechnology = $SESSION->get('nodelinktechnology');
+    } else {
+        $nodelinktechnology = intval(ConfigHelper::getConfig('phpui.default_linktechnology', 0));
+    }
+    $SMARTY->assign('nodelinktechnology', $nodelinktechnology);
+
+    if ($SESSION->is_set('nodelinkspeed')) {
+        $nodelinkspeed = $SESSION->get('nodelinkspeed');
+    } else {
+        $nodelinkspeed = intval(ConfigHelper::getConfig('phpui.default_linkspeed', 100000));
+    }
+    $SMARTY->assign('nodelinkspeed', $nodelinkspeed);
+
     $SMARTY->assign('macs', $LMS->GetNetdevMacs($netdev['id']));
     $SMARTY->assign('maclabels', $LMS->GetNetdevsMacLabels());
 

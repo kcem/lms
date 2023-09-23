@@ -4,7 +4,7 @@
 /*
  * LMS version 1.11-git
  *
- *  (C) Copyright 2001-2020 LMS Developers
+ *  (C) Copyright 2001-2022 LMS Developers
  *
  *  Please, see the doc/AUTHORS for more information about authors!
  *
@@ -43,11 +43,13 @@ $parameters = array(
     'backup' => 'b',
     'archive' => 'a',
     'output-directory:' => 'o:',
+    'output-file:' => null,
     'no-attachments' => 'n',
     'customerid:' => null,
     'division:' => null,
     'customergroups:' => null,
     'customer-status:' => null,
+    'omit-free-days' => null,
 );
 
 $long_to_shorts = array();
@@ -84,7 +86,7 @@ foreach (array_flip(array_filter($long_to_shorts, function ($value) {
 if (array_key_exists('version', $options)) {
     print <<<EOF
 lms-sendinvoices.php
-(C) 2001-2020 LMS Developers
+(C) 2001-2022 LMS Developers
 
 EOF;
     exit(0);
@@ -93,7 +95,7 @@ EOF;
 if (array_key_exists('help', $options)) {
     print <<<EOF
 lms-sendinvoices.php
-(C) 2001-2020 LMS Developers
+(C) 2001-2022 LMS Developers
 
 -C, --config-file=/etc/lms/lms.ini      alternate config file (default: /etc/lms/lms.ini);
 -h, --help                      print this help and exit;
@@ -112,6 +114,8 @@ lms-sendinvoices.php
 -b, --backup                    make financial document file backup
 -a, --archive                   archive financial documents in documents directory
 -o, --output-directory=/path    output directory for document backup
+    --output-file=/file/name    all invoices, credit notes, pro formas, debit notes and other documents
+                                are merged to single file with specified name
 -n, --no-attachments            dont attach documents
     --customerid=<id>           limit invoices to specifed customer
     --division=<shortname>
@@ -122,6 +126,7 @@ lms-sendinvoices.php
                                 should be assigned
     --customer-status=<status1,status2,...>
                                 send invoices of customers with specified status only
+    --omit-free-days            dont send invoices on free days
 
 EOF;
     exit(0);
@@ -131,7 +136,7 @@ $quiet = array_key_exists('quiet', $options);
 if (!$quiet) {
     print <<<EOF
 lms-sendinvoices.php
-(C) 2001-2020 LMS Developers
+(C) 2001-2022 LMS Developers
 
 EOF;
 }
@@ -141,8 +146,10 @@ if ($backup) {
     if (isset($options['output-directory'])) {
         $output_dir = $options['output-directory'];
         if (!is_dir($output_dir)) {
-            die("Output directory does not exist!" . PHP_EOL);
+            die('Output directory does not exist!' . PHP_EOL);
         }
+    } elseif (isset($options['output-file'])) {
+        $output_file = $options['output-file'];
     } else {
         $output_dir = getcwd();
     }
@@ -231,6 +238,8 @@ if (!$no_attachments) {
 
     // add LMS's custom plugins directory
     $SMARTY->addPluginsDir(LIB_DIR . DIRECTORY_SEPARATOR . 'SmartyPlugins');
+
+    $SMARTY->muteUndefinedOrNullWarnings();
 }
 
 // Include required files (including sequence is important)
@@ -276,8 +285,14 @@ if (!$no_attachments) {
 $invoice_filename = ConfigHelper::getConfig('sendinvoices.invoice_filename', 'invoice_%docid');
 $dnote_filename = ConfigHelper::getConfig('sendinvoices.debitnote_filename', 'dnote_%docid');
 
+$document_attachment_filename = ConfigHelper::getConfig('documents.attachment_filename', '%filename');
+
+$invoice_type = strtolower(ConfigHelper::getConfig('invoices.type'));
+$document_type = strtolower(ConfigHelper::getConfig('documents.type', ConfigHelper::getConfig('phpui.document_type', '', true)));
+
 if ($backup || $archive) {
     $part_size = 0;
+    $customer_status_condition = '';
 } else {
     // now it's time for script settings
     $smtp_options = array(
@@ -286,8 +301,8 @@ if ($backup || $archive) {
         'user' => ConfigHelper::getConfig('sendinvoices.smtp_username', ConfigHelper::getConfig('sendinvoices.smtp_user')),
         'pass' => ConfigHelper::getConfig('sendinvoices.smtp_password', ConfigHelper::getConfig('sendinvoices.smtp_pass')),
         'auth' => ConfigHelper::getConfig('sendinvoices.smtp_auth_type', ConfigHelper::getConfig('sendinvoices.smtp_auth')),
-        'ssl_verify_peer' => ConfigHelper::checkValue(ConfigHelper::getConfig('sendinvoices.smtp_ssl_verify_peer', true)),
-        'ssl_verify_peer_name' => ConfigHelper::checkValue(ConfigHelper::getConfig('sendinvoices.smtp_ssl_verify_peer_name', true)),
+        'ssl_verify_peer' => ConfigHelper::checkConfig('sendinvoices.smtp_ssl_verify_peer', true),
+        'ssl_verify_peer_name' => ConfigHelper::checkConfig('sendinvoices.smtp_ssl_verify_peer_name', true),
         'ssl_allow_self_signed' => ConfigHelper::checkConfig('sendinvoices.smtp_ssl_allow_self_signed'),
     );
 
@@ -306,6 +321,9 @@ if ($backup || $archive) {
     $dsn_email = ConfigHelper::getConfig('sendinvoices.dsn_email', '', true);
     $mdn_email = ConfigHelper::getConfig('sendinvoices.mdn_email', '', true);
     $part_size = isset($options['part-size']) ? $options['part-size'] : ConfigHelper::getConfig('sendinvoices.limit', '0');
+
+    $use_all_accounts = ConfigHelper::checkConfig('sendinvoices.use_all_accounts');
+    $use_only_alternative_accounts = ConfigHelper::checkConfig('sendinvoices.use_only_alternative_accounts');
 
     $allowed_customer_status = Utils::determineAllowedCustomerStatus(
         isset($options['customer-status'])
@@ -361,14 +379,27 @@ if (empty($fakedate)) {
 } else {
     $currtime = strtotime($fakedate);
 }
+
+$omit_free_days = isset($options['omit-free-days']);
+
 list ($year, $month, $day) = explode('/', date('Y/n/j', $currtime));
+
+$weekday = date('N', $currtime);
+$holidays = getHolidays($year);
+if ($omit_free_days && ($weekday > 5 || isset($holidays[$currtime]))) {
+    die('Invoices are not sent, because current day is free day!' . PHP_EOL);
+}
+
 $daystart = mktime(0, 0, 0, $month, $day, $year);
 $dayend = mktime(23, 59, 59, $month, $day, $year);
 
-if ($backup || $archive) {
+if ($archive) {
     $groupnames = '';
 } else {
 // prepare customergroups in sql query
+    if ($backup) {
+        $customergroups = null;
+    }
     if (isset($options['customergroups'])) {
         $customergroups = $options['customergroups'];
     }
@@ -402,14 +433,20 @@ if ($backup || $archive) {
         $customergroups = ' AND (' . implode(' OR ', $customergroup_ORs) . ')';
     }
 
-    $test = array_key_exists('test', $options);
-    if ($test) {
-        echo "WARNING! You are using test mode." . PHP_EOL;
-    }
+    if (!$backup) {
+        $test = array_key_exists('test', $options);
+        if ($test) {
+            echo "WARNING! You are using test mode." . PHP_EOL;
+        }
 
-    if (!empty($part_size) && preg_match('/^[0-9]+$/', $part_size)) {
-        $part_offset = $part_number * $part_size;
+        if (!empty($part_size) && preg_match('/^[0-9]+$/', $part_size)) {
+            $part_offset = $part_number * $part_size;
+        }
     }
+}
+
+if (empty($customergroups)) {
+    $customergroups = '';
 }
 
 if (!$no_attachments) {
@@ -422,22 +459,48 @@ if ($backup || $archive) {
     $args = array(CONTACT_EMAIL | CONTACT_INVOICES | CONTACT_DISABLED,
         CONTACT_EMAIL | CONTACT_INVOICES, DOC_INVOICE, DOC_INVOICE_PRO, DOC_CNOTE, DOC_DNOTE);
 
+    if ($omit_free_days) {
+        $prevday = $daystart;
+        $curryear = $year;
+        do {
+            $nextday = $prevday;
+            $prevday = strtotime('yesterday', $prevday);
+            $prevyear = date('Y', $prevday);
+            if ($prevyear != $curryear) {
+                $holidays = getHolidays($prevyear);
+                $curryear = $prevyear;
+            }
+        } while (date('N', $prevday) > 5 || isset($holidays[$prevday]));
+        $daystart = $nextday;
+    }
+
     if (!empty($part_size) && preg_match('/^(?<percent>[0-9]+)%$/', $part_size, $m)) {
         $percent = intval($m['percent']);
         if ($percent < 1 || $percent > 99) {
             $part_size = 0;
         } else {
-            $count = intval($DB->GetOne("SELECT COUNT(*)
-				FROM documents d
-				LEFT JOIN customeraddressview c ON c.id = d.customerid
-				JOIN (SELECT customerid, " . $DB->GroupConcat('contact') . " AS email
-					FROM customercontacts
-					WHERE (type & ?) = ?
-					GROUP BY customerid
-				) m ON m.customerid = c.id
-				WHERE " . ($customerid ? 'c.id = ' . $customerid . ' AND ' : '') . "c.deleted = 0 AND d.cancelled = 0 AND d.type IN (?, ?, ?, ?) AND c.invoicenotice = 1
-					AND d.cdate >= $daystart AND d.cdate <= $dayend"
-                . ($customergroups ?: ''), $args));
+            $count = intval($DB->GetOne(
+                "SELECT COUNT(*)
+                FROM documents d
+                LEFT JOIN customeraddressview c ON c.id = d.customerid
+                JOIN (
+                    SELECT customerid, " . $DB->GroupConcat('contact') . " AS email
+                    FROM customercontacts
+                    WHERE (type & ?) = ?
+                    GROUP BY customerid
+                ) m ON m.customerid = c.id
+                WHERE "
+                    . ($divisionid ? 'd.divisionid = ' . $divisionid : '1 = 1')
+                    . ($customerid ? ' AND c.id = ' . $customerid : '')
+                    . " AND c.deleted = 0
+                    AND d.cancelled = 0
+                    AND d.type IN (?, ?, ?, ?)
+                    AND c.invoicenotice = 1
+                    AND d.cdate >= $daystart
+                    AND d.cdate <= $dayend"
+                    . ($customergroups ?: ''),
+                $args
+            ));
             if (empty($count)) {
                 die;
             }
@@ -453,24 +516,38 @@ if ($backup || $archive) {
 
 $ignore_send_date = isset($options['ignore-send-date']) || ConfigHelper::checkConfig('sendinvoices.ignore_send_date');
 
-$query = "SELECT d.id, d.number, d.cdate, d.name, d.customerid, d.type AS doctype, d.archived, d.senddate, n.template" . ($backup || $archive ? '' : ', m.email') . "
-		FROM documents d
-		LEFT JOIN customeraddressview c ON c.id = d.customerid"
-        . ($backup || $archive ? '' : " JOIN (SELECT customerid, " . $DB->GroupConcat('contact') . " AS email
-				FROM customercontacts WHERE (type & ?) = ? GROUP BY customerid) m ON m.customerid = c.id")
-        . " LEFT JOIN numberplans n ON n.id = d.numberplanid 
-		WHERE " . ($customerid ? 'c.id = ' . $customerid : '1 = 1')
-            . $customer_status_condition
-            . ($divisionid ? ' AND d.divisionid = ' . $divisionid : '')
-            . " AND c.deleted = 0 AND d.cancelled = 0 AND d.type IN (?, ?, ?, ?)" . ($backup || $archive ? '' : " AND c.invoicenotice = 1")
-            . ($archive ? " AND d.archived = 0" : '') . "
-			AND d.cdate >= $daystart AND d.cdate <= $dayend"
-            . ($customergroups ?: '')
-        . " ORDER BY d.number" . (!empty($part_size) ? " LIMIT $part_size OFFSET $part_offset" : '');
+$query = "SELECT d.id, d.number, d.cdate, d.name, d.customerid,
+            d.type AS doctype, d.archived,
+            d.senddate, n.template" . ($backup || $archive ? '' : ', m.email') . ",
+            (CASE WHEN EXISTS (SELECT 1 FROM documents d2 WHERE d2.reference = d.id AND d2.type < 0) THEN 1 ELSE 0 END) AS documentreferenced
+    FROM documents d
+    LEFT JOIN customeraddressview c ON c.id = d.customerid"
+    . ($backup || $archive ? '' : " JOIN (SELECT customerid, " . $DB->GroupConcat('contact') . " AS email
+        FROM customercontacts WHERE (type & ?) = ? GROUP BY customerid) m ON m.customerid = c.id")
+    . " LEFT JOIN numberplans n ON n.id = d.numberplanid
+    WHERE " . ($customerid ? 'c.id = ' . $customerid : '1 = 1')
+        . $customer_status_condition
+        . ($divisionid ? ' AND d.divisionid = ' . $divisionid : '')
+        . " AND c.deleted = 0 AND d.cancelled = 0 AND d.type IN (?, ?, ?, ?)" . ($backup || $archive ? '' : " AND c.invoicenotice = 1")
+        . ($archive ? " AND d.archived = 0" : '') . "
+        AND d.cdate >= $daystart AND d.cdate <= $dayend"
+        . ($customergroups ?: '')
+    . " ORDER BY d.number" . (!empty($part_size) ? " LIMIT $part_size OFFSET $part_offset" : '');
 $docs = $DB->GetAll($query, $args);
 
 if (!empty($docs)) {
     if ($backup) {
+        $output_file = isset($output_file) && $invoice_type == 'pdf' && $document_type == 'pdf' ? $output_file : null;
+        if (isset($output_file)) {
+            $pdf_merge_backend = ConfigHelper::getConfig('documents.pdf_merge_backend', 'fpdi');
+            if ($pdf_merge_backend == 'pdfunite') {
+                $fpdi = new LMSPdfUniteBackend();
+            } else {
+                $fpdi = new LMSFpdiBackend();
+                $fpdi->setPDFVersion(ConfigHelper::getConfig('invoices.pdf_version', '1.7'));
+            }
+        }
+
         foreach ($docs as $doc) {
             $doc['invoice_filename'] = $invoice_filename;
             $doc['dnote_filename'] = $dnote_filename;
@@ -478,11 +555,86 @@ if (!empty($docs)) {
             if (!$quiet) {
                 echo "Document " . $document['filename'] . " backed up." . PHP_EOL;
             }
-            if (!$test) {
-                $fh = fopen($output_dir . DIRECTORY_SEPARATOR . $document['filename'], 'w');
-                fwrite($fh, $document['data'], strlen($document['data']));
-                fclose($fh);
+
+            $referenced_documents = array();
+            $files = array();
+
+            if (!$no_attachments && !empty($doc['documentreferenced'])) {
+                $docrefs = $LMS->getDocumentReferences($doc['id']);
+
+                if (!empty($docrefs)) {
+                    foreach ($docrefs as $docid => $docref) {
+                        $referenced_document = $LMS->GetDocumentFullContents($docid);
+                        if (empty($referenced_document)) {
+                            continue;
+                        }
+                        foreach ($referenced_document['attachments'] as $attachment) {
+                            $extension = '';
+
+                            if (!empty($attachment['type'])) {
+                                $filename = str_replace(
+                                    array(
+                                        '%filename',
+                                        '%type',
+                                        '%document',
+                                        '%docid'
+                                    ),
+                                    array(
+                                        $attachment['filename'],
+                                        $DOCTYPES[$referenced_document['type']],
+                                        $referenced_document['fullnumber'],
+                                        $docid,
+                                    ),
+                                    $document_attachment_filename
+                                );
+
+                                if (!preg_match('/\.[[:alnum:]]+$/i', $filename)) {
+                                    if (preg_match('/(?<extension>\.[[:alnum:]]+)$/i', $attachment['filename'], $m)) {
+                                        $extension = $m['extension'];
+                                    } elseif (preg_match('#/(?<extension>[[:alnum:]]+)$#i', $attachment['contenttype'], $m)) {
+                                        $extension = '.' . $m['extension'];
+                                    }
+                                }
+                            } else {
+                                $filename = $attachment['filename'];
+                            }
+
+                            $files[] = array(
+                                'content_type' => $attachment['contenttype'],
+                                'filename' => preg_replace('/[^[:alnum:]_\.]/i', '_', $filename) . $extension,
+                                'data' => $attachment['contents'],
+                            );
+                        }
+                        $referenced_documents[] = $docid;
+                    }
+                }
             }
+
+            if (!$test) {
+                if (isset($output_file)) {
+                    $fpdi->AppendPage($document['data']);
+                } else {
+                    $fh = fopen($output_dir . DIRECTORY_SEPARATOR . $document['filename'], 'w');
+                    fwrite($fh, $document['data'], strlen($document['data']));
+                    fclose($fh);
+                }
+
+                if (!empty($files)) {
+                    foreach ($files as $file) {
+                        if (isset($output_file)) {
+                            $fpdi->AppendPage($file['data']);
+                        } else {
+                            $fh = fopen($output_dir . DIRECTORY_SEPARATOR . $file['filename'], 'w');
+                            fwrite($fh, $file['data'], strlen($file['data']));
+                            fclose($fh);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!$test && isset($output_file)) {
+            $fpdi->WriteToFile($output_file);
         }
     } elseif ($archive) {
         foreach ($docs as $doc) {
@@ -547,6 +699,8 @@ if (!empty($docs)) {
             'aggregate_documents',
             'interval',
             'no_attachments',
+            'use_all_accounts',
+            'use_only_alternative_accounts',
             'which',
             'duplicate_date',
             'smtp_options'

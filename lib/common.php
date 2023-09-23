@@ -361,7 +361,9 @@ function writesyslog($message, $type)
             // the log to standard error, and use a user defined
             // logging mechanism
             openlog('lms-php', LOG_PID | LOG_NDELAY, LOG_AUTH);
-            syslog($type, $message.' (at '.$access.' from '.$_SERVER['REMOTE_ADDR'].' ('.$_SERVER['HTTP_USER_AGENT'].'))');
+            syslog($type, $message . ' (at ' . $access . ' from '
+                . (empty($_SERVER['REMOTE_ADDR']) ? 'backend' : $_SERVER['REMOTE_ADDR'])
+                . (isset($_SERVER['HTTP_USER_AGENT']) ? ' (' . $_SERVER['HTTP_USER_AGENT'] . '))' : ''));
             closelog();
             break;
         default:
@@ -474,9 +476,9 @@ function setunits($data)  // for traffic data
     return array($number, $unit);
 }
 
-function convert_to_units($value, $threshold = 5, $multiplier = 1000)
+function convert_to_units($value, $threshold = 5, $multiplier = 1000, $unit_suffix = 'bit')
 {
-    $unit_suffix = ($multiplier == 1024 ? 'ibit' : 'bit');
+    $unit_suffix = ($multiplier == 1024 ? 'i' : '') . $unit_suffix;
     $threshold = floatval($threshold);
     $multiplier = floatval($multiplier);
     if ($value < $multiplier * $multiplier * $threshold) {
@@ -512,12 +514,12 @@ function isboolean($value)
     }
 }
 
-function moneyf($value, $currency = null)
+function moneyf($value, $currency = null, $precision = 2)
 {
     if (empty($currency)) {
         $currency = Localisation::getCurrentCurrency();
     }
-    return sprintf('%01.2f %s', $value, $currency);
+    return sprintf('%01.'.$precision.'f %s', $value, $currency);
 }
 
 function moneyf_in_words($value, $currency = null)
@@ -600,7 +602,7 @@ function docnumber($number = null, $template = null, $cdate = null, $ext_num = '
     );
 
     // time conversion specifiers
-    return strftime($result, $cdate);
+    return Utils::strftime($result, $cdate);
 }
 
 // our finance round
@@ -808,7 +810,7 @@ function location_str($data)
     }
 
     if ($data['street_name']) {
-        $street = $data['street_type'] .' '. $data['street_name'];
+        $street = (isset($data['street_type']) ? $data['street_type'] . ' ' : '') . $data['street_name'];
         $location .= ($location ? ',' : '') . $street;
     }
 
@@ -913,7 +915,7 @@ function html2pdf($content, $subject = null, $title = null, $type = null, $id = 
 
         $html2pdf->pdf->SetAuthor('LMS Developers');
         $html2pdf->pdf->SetCreator('LMS ' . $layout['lmsv']);
-        if ($info) {
+        if (!empty($info)) {
             $html2pdf->pdf->SetAuthor($info['name']);
         }
         if ($subject) {
@@ -1104,10 +1106,13 @@ function check_password_strength($password)
         && preg_match('/[0-9]/', $password) && mb_strlen($password) >= 8);
 }
 
-function access_denied()
+function access_denied($message = null)
 {
     global $SMARTY, $SESSION;
 
+    if (isset($message)) {
+        $SMARTY->assign('message', trans($message));
+    }
     $SMARTY->display('noaccess.html');
     $SESSION->close();
     die;
@@ -1373,7 +1378,11 @@ function handle_file_uploads($elemid, &$error)
             }
             unset($file);
             $$elemid = $fileupload[$elemid];
+        } else {
+            $$elemid = array();
         }
+    } else {
+        $$elemid = array();
     }
     return compact('fileupload', 'tmppath', $elemid);
 }
@@ -1443,10 +1452,11 @@ function geocode($location)
     }
 
     $page = json_decode($res, true);
-    $latitude = str_replace(',', '.', $page["results"][0]["geometry"]["location"]["lat"]);
-    $longitude = str_replace(',', '.', $page["results"][0]["geometry"]["location"]["lng"]);
+
+    $latitude = empty($page['results']) ? null : str_replace(',', '.', $page["results"][0]["geometry"]["location"]["lat"]);
+    $longitude = empty($page['results']) ? null : str_replace(',', '.', $page["results"][0]["geometry"]["location"]["lng"]);
+    $accuracy = empty($page['results']) ? null : $page["results"][0]["geometry"]["location_type"];
     $status = $page["status"];
-    $accuracy = $page["results"][0]["geometry"]["location_type"];
     return array(
         'status' => $status,
         'error' => isset($page['error_message']) ? $page['error_message'] : '',
@@ -1478,8 +1488,8 @@ function osm_geocode($params)
     }
 
     $page = json_decode($res, true);
-    $latitude = str_replace(',', '.', $page[0]['lat']);
-    $longitude = str_replace(',', '.', $page[0]['lon']);
+    $latitude = isset($page[0]) ? str_replace(',', '.', $page[0]['lat']) : '';
+    $longitude = isset($page[0]) ? str_replace(',', '.', $page[0]['lon']) : '';
     return array(
         'latitude' => $latitude,
         'longitude' => $longitude,

@@ -148,7 +148,7 @@ function getThroughput($ip)
 
     $cmd = str_replace('%i', $ip, $cmd);
     exec($cmd, $output);
-    if (!is_array($output) && count($output) != 1) {
+    if (!is_array($output) || count($output) != 1) {
         return '';
     }
 
@@ -235,6 +235,14 @@ function getFirstFreeAddress($netid, $elemid)
     $ip = $LMS->GetFirstFreeAddress($netid);
     if ($ip != false) {
         $result->assign($elemid, 'value', $ip);
+        $result->script('
+            $("#ipaddr").removeClass("lms-ui-warning").removeAttr("data-tooltip").attr("title", null);
+        ');
+    } else {
+        $result->script('
+            $("#ipaddr").addClass("lms-ui-warning").removeAttr("data-tooltip").attr("title",
+                $t("No free addresses in selected network!"));
+        ');
     }
 
     return $result;

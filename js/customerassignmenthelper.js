@@ -1,4 +1,8 @@
 // $Id$
+const netFlagElem = $("#netflag");
+const netPriceElem = $("#netprice");
+const grossPriceElem = $("#grossprice");
+const invoiceElem = $("#invoice");
 
 function CustomerAssignmentHelper(options) {
 	var helper = this;
@@ -28,6 +32,12 @@ function CustomerAssignmentHelper(options) {
 			this.phoneTariffType = 0;
 		}
 
+		if ('tvTariffType' in options) {
+			this.tvTariffType = options.tvTariffType;
+		} else {
+			this.tvTariffType = 0;
+		}
+
 		if ('tariffTypes' in options) {
 			this.tariffTypes = options.tariffTypes;
 		} else {
@@ -37,14 +47,36 @@ function CustomerAssignmentHelper(options) {
 		if ('variablePrefix' in options) {
 			this.variablePrefix = options.variablePrefix;
 		} else {
-			this.variablePrefix = tariffTypes;
+			this.variablePrefix = 'assignment';
 		}
-    } else {
+
+		if ('promotionAttachments' in options) {
+			this.promotionAttachments = options.promotionAttachments;
+		} else {
+			this.promotionAttachments = {};
+		}
+
+		if ('assignmentPromotionAttachments' in options) {
+			this.assignmentPromotionAttachments = options.assignmentPromotionAttachments;
+		} else {
+			this.assignmentPromotionAttachments = {};
+		}
+
+		if ('assignmentPromotionSchemaAttachments' in options) {
+			this.assignmentPromotionSchemaAttachments = options.assignmentPromotionSchemaAttachments;
+		} else {
+			this.assignmentPromotionSchemaAttachments = {};
+		}
+	} else {
 		this.customerid = 0;
 		this.selected = {};
 		this.internetTariffType = 0;
 		this.phoneTariffType = 0;
+		this.tvTariffType = 0;
 		this.tariffTypes = {};
+		this.promotionAttachments = {};
+		this.assignmentPromotionAttachments = {};
+		this.assignmentPromotionSchemaAttachments = {};
 		this.variablePrefix = 'assignment';
     }
 
@@ -123,12 +155,14 @@ function CustomerAssignmentHelper(options) {
 	}
 
 	this.promotionSelectionHandler = function() {
-		$('#a_location,#a_check_all_terminals,#a_options,#a_existingassignments,#a_properties').toggle(parseInt($(this).val()) != 0);
-		$('#backward-period').toggle(parseInt($(this).val()) == 0);
+		var schemaId = parseInt($(this).val());
+
+		$('#a_location,#a_check_all_terminals,#a_options,#a_existingassignments,#a_properties').toggle(schemaId != 0);
+		$('#backward-period').toggle(!schemaId);
 
 		$('.promotion-table').hide();
 
-		$("#schema" + $(this).val()).show();
+		$("#schema" + schemaId).show();
 
 		var selected_option = $('option:selected', this);
 		var schema_title = selected_option.attr('title');
@@ -138,14 +172,69 @@ function CustomerAssignmentHelper(options) {
 
 		init_multiselects('select.lms-ui-multiselect-deferred:visible');
 
+		var html = '';
+
+		if (helper.promotionAttachments.hasOwnProperty(schemaId) && !$.isEmptyObject(helper.promotionAttachments[schemaId].promotions)) {
+			html += '<div class="promotion-attachments">' +
+				'<strong>' + $t("from promotion") + '</strong>' +
+				'<ul>';
+
+			$.each(helper.promotionAttachments[schemaId].promotions, function (index, attachment) {
+				html +=
+					'<li>' +
+						'<label>' +
+							'<input type="hidden" name="' + helper.variablePrefix + '[promotion-attachments][' + attachment.id + ']"' +
+								' value="0">' +
+							'<input type="checkbox" name="' + helper.variablePrefix + '[promotion-attachments][' + attachment.id + ']"' +
+								' value="' + attachment.id + '"' +
+								(helper.assignmentPromotionAttachments.hasOwnProperty(attachment.id) && helper.assignmentPromotionAttachments[attachment.id] == attachment.id ||
+									!helper.assignmentPromotionAttachments.hasOwnProperty(attachment.id) && attachment.checked ? ' checked' : '') + '>' +
+							'<span>' +
+								escapeHtml(attachment.label.length ? attachment.label : attachment.filename) +
+							'</span>' +
+						'</label>' +
+					'</li>';
+			});
+
+			html += '</ul></div>';
+		}
+
+		if (helper.promotionAttachments.hasOwnProperty(schemaId) && !$.isEmptyObject(helper.promotionAttachments[schemaId].promotionschemas)) {
+			html += '<div class="promotion-attachments">' +
+				'<strong>' + $t("from promotion schema") + '</strong>' +
+				'<ul>';
+
+			$.each(helper.promotionAttachments[schemaId].promotionschemas, function (index, attachment) {
+				html +=
+					'<li>' +
+						'<label>' +
+							'<input type="hidden" name="' + helper.variablePrefix + '[promotion-schema-attachments][' + attachment.id + ']"' +
+								' value="0">' +
+							'<input type="checkbox" name="' + helper.variablePrefix + '[promotion-schema-attachments][' + attachment.id + ']"' +
+								' value="' + attachment.id + '"' +
+								(helper.assignmentPromotionSchemaAttachments.hasOwnProperty(attachment.id) && helper.assignmentPromotionSchemaAttachments[attachment.id] == attachment.id ||
+									!helper.assignmentPromotionSchemaAttachments.hasOwnProperty(attachment.id) && attachment.checked ? ' checked' : '') + '>' +
+							'<span>' +
+								escapeHtml(attachment.label.length ? attachment.label : attachment.filename) +
+							'</span>' +
+						'</label>' +
+					'</li>';
+			});
+
+			html += '</ul></div>';
+		}
+
+		$('#promotion-attachments').html(html);
+		$('#a_attachments').toggle($('#tariff-select').val() == -2 && typeof(promotionAttachments) != 'undefined' && html.length > 0);
+
 		$('#location-select').trigger('change');
 	}
 
 	this.tariffSelectionHandler = function () {
 		var selected_tariff = $(this).find(':selected');
 		var assignment_id = selected_tariff.attr('data-assignment-id');
-		var tariffaccess = parseInt(selected_tariff.attr('data-tariffaccess'));
-		var tarifftype = parseInt(selected_tariff.attr('data-tarifftype'));
+		var tariffAccess = parseInt(selected_tariff.attr('data-tariffaccess'));
+		var tariffType = parseInt(selected_tariff.attr('data-tarifftype'));
 		var location_select = $('#location-select').val();
 		var tr = $(this).closest('tr.schema-tariff-container');
 		var period_tables = tr.find('.single-assignment[data-assignment-id]');
@@ -154,65 +243,41 @@ function CustomerAssignmentHelper(options) {
 
 		tr = tr.next('.customerdevices');
 
-		tr.toggle(tariffaccess != -1);
+		tr.toggle(tariffAccess != -1);
 		period_tables.hide();
 		period_tables.filter('[data-assignment-id="' + assignment_id + '"]').show();
 
-		switch (tarifftype) {
-			case helper.internetTariffType:
-				tr.find('div.nodes,div.netdevnodes').show();
-				tr.find('div.phones').hide();
-				break;
-			case helper.phoneTariffType:
-				tr.find('div.nodes,div.netdevnodes').hide();
-				tr.find('div.phones').show();
-				break;
-			default:
-				tr.find('div.nodes,div.netdevnodes,div.phones').hide();
-		}
+		tr.find('.nodes,.netdevnodes').toggle(tariffType == helper.internetTariffType || tariffType == helper.tvTariffType);
+		tr.find('.phones').toggle(tariffType == helper.phoneTariffType);
 
-		init_multiselects('select.lms-ui-multiselect-deferred:visible');
-
-		var ms = [];
-		if (tarifftype == helper.phoneTariffType) {
-			ms.push(tr.find('div.phones .lms-ui-multiselect-container'));
-		} else {
-			ms.push(tr.find('div.nodes .lms-ui-multiselect-container'));
-			ms.push(tr.find('div.netdevnodes .lms-ui-multiselect-container'));
-		}
-        if (!ms.length) {
+		var selects = tr.find(tariffType == helper.phoneTariffType ? '.phones select' : (tariffType == helper.internetTariffType || tariffType == helper.tvTariffType ? '.nodes select,.netdevnodes select' : ''));
+		if (!selects.length) {
 			return;
 		}
-        $.each(ms, function(index, select) {
-			if (!select) {
-				return;
-			}
-        	var ms = select.data('multiselect-object');
-        	if (!ms) {
-        		return;
-        	}
-			ms.getOptions().each(function (key) {
+
+		init_multiselects(selects.filter(function() {
+			return $(this).is('.lms-ui-multiselect-deferred:visible') && !$(this).closest('.lms-ui-multiselect-container').length;
+		}));
+
+		selects.each(function() {
+			$(this).find('option').each(function() {
 				var authtype = parseInt($(this).attr('data-tariffaccess'));
 				var location = $(this).attr('data-location');
-				if (((authtype && (authtype & tariffaccess)) || !tariffaccess) &&
-					(location == location_select || !location_select.length)) {
-					ms.showOption(key);
-				} else {
-					ms.hideOption(key);
-				}
+				$(this).toggle(
+					((authtype && (authtype & tariffAccess)) || !tariffAccess) &&
+					(location == location_select || !location_select.length)
+				);
 			});
-			if ($('#check_all_terminals').prop('checked')) {
-				ms.toggleCheckAll(true);
-			}
-			ms.refreshSelection();
+			$(this).trigger('lms:multiselect:updated');
+			$(this).trigger('lms:multiselect:toggle_check_all', { checked: $('#check_all_terminals').prop('checked') });
 		});
 	}
 
 	this.tariffCheckboxHandler = function() {
 		var checked = this.checked;
 		var assignment_id = $(this).attr('data-assignment-id');
-		var tariffaccess = parseInt($(this).attr('data-tariffaccess'));
-		var tarifftype = parseInt($(this).attr('data-tarifftype'));
+		var tariffAccess = parseInt($(this).attr('data-tariffaccess'));
+		var tariffType = parseInt($(this).attr('data-tarifftype'));
 		var location_select = $('#location-select').val();
 		var tr = $(this).closest('tr.schema-tariff-container');
 		var period_table = tr.find('.single-assignment[data-assignment-id="' + assignment_id + '"]');
@@ -224,57 +289,37 @@ function CustomerAssignmentHelper(options) {
 		tr.toggle(checked);
 		period_table.toggle(checked);
 
-		switch (tarifftype) {
-			case helper.phoneTariffType:
-				tr.find('div.nodes,div.netdevnodes').hide();
-				tr.find('div.phones').show();
-				break;
-			default:
-				tr.find('div.nodes,div.netdevnodes').show();
-				tr.find('div.phones').hide();
-		}
+		tr.find('.nodes,.netdevnodes').toggle(tariffType != helper.phoneTariffType);
+		tr.find('.phones').toggle(tariffType == helper.phoneTariffType);
 
-		init_multiselects('select.lms-ui-multiselect-deferred:visible');
-
-		var ms = [];
-		if (tarifftype == helper.phoneTariffType) {
-			ms.push(tr.find('div.phones .lms-ui-multiselect-container'));
-		} else {
-			ms.push(tr.find('div.nodes .lms-ui-multiselect-container'));
-			ms.push(tr.find('div.netdevnodes .lms-ui-multiselect-container'));
-		}
-        if (!ms.length) {
+		var selects = tr.find(tariffType == helper.phoneTariffType ? '.phones select' : '.nodes select,.netdevnodes select');
+		if (!selects.length) {
 			return;
 		}
-        $.each(ms, function(index, select) {
-			if (!select) {
-				return;
-			}
-        	var ms = select.data('multiselect-object');
-        	if (!ms) {
-        		return;
-        	}
-			ms.getOptions().each(function (key) {
+
+		init_multiselects(selects.filter(function() {
+			return $(this).is('.lms-ui-multiselect-deferred:visible') && !$(this).closest('.lms-ui-multiselect-container').length;
+		}));
+
+		selects.each(function() {
+			$(this).find('option').each(function() {
 				if (checked) {
 					var authtype = parseInt($(this).attr('data-tariffaccess'));
 					var location = $(this).attr('data-location');
-					if (((authtype && (authtype & tariffaccess)) || !tariffaccess) &&
-						(location == location_select || !location_select.length)) {
-						ms.showOption(key);
-					} else {
-						ms.hideOption(key);
-					}
+					$(this).toggle(
+						((authtype && (authtype & tariffAccess)) || !tariffAccess) &&
+						(location == location_select || !location_select.length)
+					);
 				} else {
-					ms.hideOption(key);
+					$(this).hide();
 				}
 			});
-			if ($('#check_all_terminals').prop('checked')) {
-				ms.toggleCheckAll(true);
-			}
+			$(this).trigger('lms:multiselect:updated');
+			$(this).trigger('lms:multiselect:toggle_check_all', { checked: checked && $('#check_all_terminals').prop('checked') });
 		});
 	}
 
-    this.locationSelectionHandler = function() {
+	this.locationSelectionHandler = function() {
 		$('.schema-tariff-selection').trigger('change');
 		$('.schema-tariff-checkbox').trigger('change');
 
@@ -284,6 +329,26 @@ function CustomerAssignmentHelper(options) {
 		location_select.toggleClass('lms-ui-error', validationError)
 			.next().toggleClass('lms-ui-error', validationError)
 			.attr('title', validationError ? errorMessage : null).removeAttr('data-tooltip');
+
+		var schemaId = $('#promotion-select').val();
+		var promotionTable = $('#schema' + schemaId);
+		var location = location_select.val();
+		promotionTable.find('.nodes select,.netdevnodes select').each(function() {
+			var schemaTariffElement = $(this).closest('.customerdevices').siblings('.schema-tariff-container').find('.schema-tariff-checkbox,.schema-tariff-selection');
+			var tariffAccess = parseInt(
+				schemaTariffElement.is('.schema-tariff-checkbox') ?
+					schemaTariffElement.attr('data-tariffaccess') :
+					schemaTariffElement.find('option:selected').attr('data-tariffaccess')
+			);
+			$(this).find('option').each(function() {
+				var authtype = parseInt($(this).attr('data-tariffaccess'));
+				$(this).toggle(
+					((authtype && (authtype & tariffAccess)) || !tariffAccess) &&
+					(location == '' || location == $(this).attr('data-location'))
+				);
+			});
+			$(this).trigger('lms:multiselect:updated');
+		});
 	}
 
 	this.updateDevices = function() {
@@ -332,15 +397,13 @@ function CustomerAssignmentHelper(options) {
 						options = '';
 						$.each(data.nodes, function(key, node) {
 							var location = String(node.location);
-							if (location.length > 50) {
-								location = location.substr(0, 50) + '...';
-							}
+							location = node.teryt == '1' ? $t('$a (TERYT)', location) : location;
 							var nodeid = String(node.id).lpad('0', 4);
 							options += '<option value="' + node.id + '"' +
 								(("snodes" in selected) && (schemaid in selected.snodes) && (label in selected.snodes[schemaid]) &&
 								(selected.snodes[schemaid][label].indexOf(node.id) > -1) ? ' selected' : '') +
 								' data-tariffaccess="' + node.authtype + '"' +
-								' data-location="' + node.location + '"' +
+								' data-location="' + location + '"' +
 								' data-html-content="<strong>' + node.name + '</strong>' +
 								' (' + nodeid + ')' + (location.length ? ' / ' + location : '') + '"';
 							options += '>';
@@ -362,15 +425,13 @@ function CustomerAssignmentHelper(options) {
 						options = '';
 						$.each(data.netdevnodes, function(key, node) {
 							var location = String(node.location);
-							if (location.length > 50) {
-								location = location.substr(0, 50) + '...';
-							}
+							location = node.teryt == '1' ? $t('$a (TERYT)', location) : location;
 							var nodeid = String(node.id).lpad('0', 4);
 							options += '<option value="' + node.id + '"' +
 								(("snodes" in selected) && (schemaid in selected.snodes) && (label in selected.snodes[schemaid]) &&
 								(selected.snodes[schemaid][label].indexOf(node.id) > -1) ? ' selected' : '') +
 								' data-tariffaccess="' + node.authtype + '"' +
-								' data-location="' + node.location + '"' +
+								' data-location="' + location + '"' +
 								' data-html-content="<strong>' + node.name + '</strong>' +
 								' (' + nodeid + ')' + ' / ' + node.netdev_name + (location.length ? ' / ' + location : '') + '"';
 							options += '>';
@@ -385,21 +446,19 @@ function CustomerAssignmentHelper(options) {
 
 					if (data.voipaccounts) {
 						html += '<div class="phones"><img src="img/voip.gif"> ' +
-							'<span class="bold">' + $t('Voip Accounts:') + '</span><br>';
+							'<span class="bold">' + $t('VoIP Accounts:') + '</span><br>';
 						html += '<select name="' + helper.variablePrefix + '[sphones][' + schemaid + '][' +
 							label + '][]" multiple class="lms-ui-multiselect-deferred" data-separator="<hr>">';
 
 						options = '';
 						$.each(data.voipaccounts, function(key, account) {
 							var location = String(account.location);
-							if (location.length > 50) {
-								location = location.substr(0, 50) + '...';
-							}
+							location = account.teryt == '1' ? $t('$a (TERYT)', location) : location;
 							$.each(account.phones, function(key, phone) {
 								options += '<option value="' + phone.id + '"' +
 									(("sphones" in selected) && (schemaid in selected.sphones) && (label in selected.sphones[schemaid]) &&
 									(selected.sphones[schemaid][label].indexOf(phone.id) > -1) ? ' selected' : '') +
-									' data-location="' + account.location + '"' +
+									' data-location="' + location + '"' +
 									' data-html-content="<strong>' + phone.phone + '</strong>' +
 									' / ' + account.login + (location.length ? ' / ' + location : '') + '"';
 								options += '>';
@@ -423,14 +482,15 @@ function CustomerAssignmentHelper(options) {
 				];
 
 				var location_count = 0;
-				options = '<option value="">' + $t('- all -') + '</option>';
+				options = '<option value="">' + $t('— all —') + '</option>';
 				if (data['with-end-points']) {
 					options += '<optgroup label="' + $t("with end-points") + '">';
 					$.each(data['with-end-points'], function(key, value) {
-						options += '<option value="' + value.location + '"' +
-							(("location" in selected) && selected.location == value.location ? ' selected' : '') +
+						var location = value.teryt == '1' ? $t('$a (TERYT)', value.location) : value.location;
+						options += '<option value="' + location + '"' +
+							(("location" in selected) && selected.location == location ? ' selected' : '') +
 							' data-icon="' + location_type_icons[value.location_type] + '">' +
-							value.location + '</option>';
+							location + '</option>';
 						location_count++;
 					});
 					options += '</optgroup>';
@@ -438,10 +498,11 @@ function CustomerAssignmentHelper(options) {
 				if (data['without-end-points']) {
 					options += '<optgroup label="' + $t("without end-points") + '">';
 					$.each(data['without-end-points'], function(key, value) {
-						options += '<option value="' + value.location + '"' +
-							(("location" in selected) && selected.location == value.location ? ' selected' : '') +
+						var location = value.teryt == '1' ? $t('$a (TERYT)', value.location) : value.location;
+						options += '<option value="' + location + '"' +
+							(("location" in selected) && selected.location == location ? ' selected' : '') +
 							' data-icon="' + location_type_icons[value.location_type] + '">' +
-							value.location + '</option>';
+							location + '</option>';
 						location_count++;
 					});
 					options += '</optgroup>';
@@ -463,13 +524,14 @@ function CustomerAssignmentHelper(options) {
 				}
 				$('#recipient-select').html(options);
 
-				$('#a_promotions,#a_align_periods').show();
-
-                init_multiselects('select.lms-ui-multiselect-deferred:visible');
+				$('#a_align_periods').show();
 
 				$('#promotion-select').trigger('change');
+
 				tariffSelectionHandler();
-            }
+
+				init_multiselects('select.lms-ui-multiselect-deferred:visible');
+			}
 		});
     }
 
@@ -520,6 +582,7 @@ function tariffSelectionHandler() {
 		tariffaccess = parseInt(tariffaccess);
 	}
 	var val = tariff_select.val();
+	$('#tariff-price-variants').html('');
 
 	$('#tarifftype').val(tarifftype);
 
@@ -563,16 +626,35 @@ function tariffSelectionHandler() {
 
 		$('#a_attribute').hide();
 	} else {
-		var tariffGrossPrice = selected.attr('data-tariffvalue');
-		var tariffNetPrice = selected.attr('data-tariffnetvalue');
-		var tariffNetFlag = selected.attr('data-tariffnetflag');
-		var tariffTaxId = selected.attr('data-tarifftaxid');
+		let tariffGrossPrice = ((assignmentTariffId && assignmentTariffId == val && assignmentGrossvalue) ? assignmentGrossvalue : selected.attr('data-tariffvalue'));
+		let tariffNetPrice = ((assignmentTariffId && assignmentTariffId == val && assignmentNetvalue) ? assignmentNetvalue : selected.attr('data-tariffnetvalue'));
+		let tariffNetFlag = ((assignmentTariffId && assignmentTariffId == val && assignmentNetflag) ? assignmentNetflag : selected.attr('data-tariffnetflag'));
+		let tariffTaxId = ((assignmentTariffId && assignmentTariffId == val && assignmentTaxid ) ? assignmentTaxid : selected.attr('data-tarifftaxid'));
+		let tariffBaseNetPrice = selected.attr('data-tariffnetvalue');
+		let tariffBaseGrossPrice = selected.attr('data-tariffvalue');
+		let tariffPriceVariants = selected.attr('data-tariffpricevariants');
 
 		$('#a_tax,#a_price').show();
 		$('#a_type,#a_currency,#a_splitpayment,#a_taxcategory,#a_productid,#a_name').hide();
+		if (tariffPriceVariants) {
+			let tariffPriceVariantsObj = JSON.parse(tariffPriceVariants);
+			if (Object.keys(tariffPriceVariantsObj).length > 0) {
+				// draw info with tariff price variants
+				drawPriceVariants(tariffPriceVariantsObj, $('#tariff-price-variants'));
 
-		$('#grossprice').val(tariffGrossPrice).prop('disabled', true);
-		$('#netprice').val(tariffNetPrice).prop('disabled', true);
+				// get tariff price variants according to quantity
+				let quantity = $("#quantity").val();
+				let priceVariant = getPriceVariant(parseInt(quantity), tariffPriceVariantsObj);
+				if (Object.keys(priceVariant).length > 0) {
+					grossPriceElem.val(priceVariant.gross_price);
+					netPriceElem.val(priceVariant.net_price);
+				} else {
+					grossPriceElem.val(tariffBaseGrossPrice);
+					netPriceElem.val(tariffBaseNetPrice);
+				}
+			}
+		}
+
 		$('#a_price, #a_tax').addClass('lms-ui-disabled');
 
 		if(parseInt(tariffNetFlag) === 1) {
@@ -588,10 +670,8 @@ function tariffSelectionHandler() {
 			$('#invoice').find('option[value="' + assignment_settings.DOC_DNOTE + '"]').prop('disabled', false);
 		}
 		$('#netflag').prop('disabled', true);
-
-		assignmentGrossvalue = '';
-		assignmentNetvalue = '';
-		assignmentNetflag = false;
+		grossPriceElem.val(tariffGrossPrice).prop('disabled', true);
+		netPriceElem.val(tariffNetPrice).prop('disabled', true);
 
 		$('#tax').val(tariffTaxId).prop('disabled', true);
 
@@ -610,10 +690,10 @@ function tariffSelectionHandler() {
 	}
 
 	if (val == -1) {
-		$('#a_numberplan,#a_paytype,#a_address,#a_day,#a_options,#a_existingassignments').hide();
+		$('#a_numberplan,#a_paytime,#a_paytype,#a_address,#a_day,#a_options,#a_existingassignments').hide();
 		$('#a_properties').show();
 	} else {
-		$('#a_numberplan,#a_paytype,#a_address,#a_day').show();
+		$('#a_numberplan,#a_paytime,#a_paytype,#a_address,#a_day').show();
 		$('#backward-period').toggle(val != -2 || !promotion_select);
 		if ((val == -2 && promotion_select) || (val != -2)) {
 			$('#a_options,#a_properties,#a_existingassignments').show();
@@ -659,11 +739,6 @@ function tariffSelectionHandler() {
 
 $('#tariff-select').change(tariffSelectionHandler);
 
-const netFlagElem = $("#netflag");
-const netPriceElem = $("#netprice");
-const grossPriceElem = $("#grossprice");
-const invoiceElem = $("#invoice");
-
 function claculatePriceFromGross() {
 	let grossPriceElemVal = grossPriceElem.val();
 	grossPriceElemVal = parseFloat(grossPriceElemVal.replace(/[\,]+/, '.'));
@@ -672,13 +747,13 @@ function claculatePriceFromGross() {
 		let selectedTaxId = $("#tax").find('option:selected').val();
 		let tax = $('#tax' + selectedTaxId).val();
 
-		let grossPrice = financeDecimals.round(grossPriceElemVal);
-		let netPrice = financeDecimals.round(grossPrice / (tax / 100 + 1));
+		let grossPrice = financeDecimals.round(grossPriceElemVal, 3);
+		let netPrice = financeDecimals.round(grossPrice / (tax / 100 + 1), 3);
 
-		netPrice = netPrice.toFixed(2).replace(/[\.]+/, ',');
+		netPrice = netPrice.toFixed(3).replace(/[\.]+/, ',');
 		netPriceElem.val(netPrice);
 
-		grossPrice = grossPrice.toFixed(2).replace(/[\.]+/, ',');
+		grossPrice = grossPrice.toFixed(3).replace(/[\.]+/, ',');
 		grossPriceElem.val(grossPrice);
 	} else {
 		netPriceElem.val('');
@@ -694,13 +769,13 @@ function claculatePriceFromNet() {
 		let selectedTaxId = $("#tax").find('option:selected').val();
 		let tax = $('#tax' + selectedTaxId).val();
 
-		let netPrice = financeDecimals.round(netPriceElemVal);
-		let grossPrice = financeDecimals.round(netPrice * (tax / 100 + 1));
+		let netPrice = financeDecimals.round(netPriceElemVal, 3);
+		let grossPrice = financeDecimals.round(netPrice * (tax / 100 + 1), 3);
 
-		grossPrice = grossPrice.toFixed(2).replace(/[\.]+/, ',');
+		grossPrice = grossPrice.toFixed(3).replace(/[\.]+/, ',');
 		grossPriceElem.val(grossPrice);
 
-		netPrice = netPrice.toFixed(2).replace(/[\.]+/, ',');
+		netPrice = netPrice.toFixed(3).replace(/[\.]+/, ',');
 		netPriceElem.val(netPrice);
 	} else {
 		grossPriceElem.val('');
@@ -741,6 +816,116 @@ $("#grossprice").on('change', function () {
 
 $("#netprice").on('change', function () {
 	claculatePriceFromNet();
+});
+
+$(".format-3f").on('change', function () {
+	if ($(this).val()) {
+		let roundedValue = financeRound($(this).val(), 3);
+		$(this).val(roundedValue);
+	}
+});
+
+$("#discount_value").on('change', function () {
+	if ($("#discount_type").val() == 2) {
+		let roundedValue = financeRound($(this).val(), 3);
+		$(this).val(roundedValue);
+	}
+
+	if ($("#discount_type").val() == 1) {
+		let roundedValue = financeRound($(this).val(), 2);
+		$(this).val(roundedValue);
+	}
+});
+
+$("#discount_type").on('change', function () {
+	let discountValueElem = $("#discount_value");
+	let discountValueElemVal = discountValueElem.val();
+	if (discountValueElemVal) {
+		if ($(this).val() == 2) {
+			let roundedValue = financeRound(discountValueElemVal, 3);
+			discountValueElem.val(roundedValue);
+		}
+		if ($(this).val() == 1) {
+			let roundedValue = financeRound(discountValueElemVal, 2);
+			discountValueElem.val(roundedValue);
+		}
+	}
+});
+
+function getPriceVariant(quantity, tariffPriceVariants) {
+	let priceVariant = {};
+	let upThreshold;
+	$.each(tariffPriceVariants, function (idx, price_variant) {
+		upThreshold = price_variant.quantity_threshold;
+		if (quantity > upThreshold) {
+			priceVariant = price_variant;
+		} else {
+			return false;
+		}
+	});
+
+	return priceVariant;
+}
+
+function drawPriceVariants(tariffPriceVariants, elem) {
+	let html = '<fieldset class="price-variants">' +
+		'<legend><strong>' + $t('Price variants') + '</strong></legend>' +
+			'<div class="lms-ui-box">' +
+				'<div class="lms-ui-box-header">' +
+					'<div class="lms-ui-box-row">' +
+						'<div class="lms-ui-box-field">' +
+							'<strong>' + $t('Gross price') + '</strong>' +
+						'</div>' +
+						'<div class="lms-ui-box-field">' +
+							'<strong>' + $t('Net price') + '</strong>' +
+						'</div>' +
+						'<div class="lms-ui-box-field">' +
+							'<strong>' + $t('Quantity threshold') + '</strong>' +
+						'</div>' +
+					'</div>' +
+				'</div>' +
+				'<div class="lms-ui-box-body lms-ui-background-cycle">';
+	$.each(tariffPriceVariants, function ($idx, price_variant) {
+		let gross_price = price_variant.gross_price;
+		let net_price = price_variant.net_price;
+		let currency = price_variant.currency;
+		html += '<div class="lms-ui-box-row highlight">';
+		html += '<div class="lms-ui-box-field"><strong>' + gross_price.replace(/[.]+/, ',') + ' ' + currency +'</strong></div>';
+		html += '<div class="lms-ui-box-field">' + net_price.replace(/[.]+/, ',') +  ' ' + currency +'</div>';
+		html += '<div class="lms-ui-box-field">' + price_variant.quantity_threshold +  ' ' + currency +'</div>';
+		html += '</div>';
+	});
+
+	html+= '</filedset>';
+	let tariffPriceVariantsTemplateElem = $('#tariff_price_variants_template');
+	let dataHintElem = tariffPriceVariantsTemplateElem.contents().filter(function () {
+		return this.nodeType == 1;
+	});
+	dataHintElem.attr('data-hint', html);
+	elem.append(tariffPriceVariantsTemplateElem.html());
+}
+
+$("#quantity").on('change', function () {
+	let tariff_select = $('#tariff-select');
+	let selected = tariff_select.find(':selected');
+	let tariffId = selected.val();
+	if (tariffId > 0) {
+		let tariffBaseNetPrice = selected.attr('data-tariffnetvalue');
+		let tariffBaseGrossPrice = selected.attr('data-tariffvalue');
+		let tariffPriceVariants = selected.attr('data-tariffpricevariants');
+		let tariffPriceVariantsObj = JSON.parse(tariffPriceVariants);
+
+		if (Object.keys(tariffPriceVariantsObj).length > 0) {
+			let priceVariant = getPriceVariant(parseInt($(this).val()), tariffPriceVariantsObj);
+			if (Object.keys(priceVariant).length > 0) {
+				grossPriceElem.val(priceVariant.gross_price);
+				netPriceElem.val(priceVariant.net_price);
+			} else {
+				grossPriceElem.val(tariffBaseGrossPrice);
+				netPriceElem.val(tariffBaseNetPrice);
+			}
+		}
+	}
 });
 
 $('#invoice').on('change', function () {

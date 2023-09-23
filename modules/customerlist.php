@@ -67,12 +67,16 @@ if ($api) {
         $filter['network'] = $_GET['n'];
     }
 
-    if (isset($_GET['g'])) {
-        $filter['customergroup'] = Utils::filterIntegers($_GET['g']);
+    if (isset($_GET['gop'])) {
+        $filter['customergroupsqlskey'] = $_GET['gop'];
     }
 
-    if (isset($_GET['ng'])) {
-        $filter['nodegroup'] = $_GET['ng'];
+    if (isset($_GET['g'])) {
+        $filter['customergroup'] = Utils::filterIntegers(is_array($_GET['g']) ? $_GET['g'] : array($_GET['g']));
+    }
+
+    if (isset($_GET['ng']) && is_array($_GET['ng'])) {
+        $filter['nodegroup'] = Utils::filterIntegers($_GET['ng']);
     }
 
     if (isset($_GET['d'])) {
@@ -85,8 +89,9 @@ if ($api) {
 
     if (isset($_GET['flags'])) {
         $filter['flags'] = $_GET['flags'];
-    } else {
-        $filter['flags'] = array();
+        if (empty($_GET['flags']) || count($_GET['flags']) == 1 && in_array('0', $_GET['flags'])) {
+            $filter['flags'] = array();
+        }
     }
 
     if (isset($_GET['page'])) {

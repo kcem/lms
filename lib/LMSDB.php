@@ -41,6 +41,8 @@ class LMSDB
     const RESOURCE_TYPE_VIEW = 2;
     const RESOURCE_TYPE_COLUMN = 3;
     const RESOURCE_TYPE_CONSTRAINT = 4;
+    const RESOURCE_TYPE_INDEX = 5;
+    const RESOURCE_TYPE_COLUMN_TYPE = 6;
 
     private static $db;
     
@@ -101,12 +103,14 @@ class LMSDB
                 throw new Exception('Unable to load driver for "' . $dbtype . '" database!');
         }
 
+/*
         if (!$db->IsLoaded()) {
-            throw new Exception('PHP Driver for "' . $dbtype . '" database doesn\'t seems to be loaded.');
+            throw new Exception('PHP Driver for "' . $dbtype . '" database doesn\'t seem to be loaded.');
         }
+*/
 
         if (!$db->GetDbLink()) {
-            throw new Exception('Unable to connect to database!');
+            throw new Exception($db->GetConnectionError());
         }
 
         $db->SetDebug($debug);

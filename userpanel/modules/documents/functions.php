@@ -78,10 +78,55 @@ function module_main()
                             $SESSION->save('smsauthcode', $sms_authcode);
                             $SESSION->save('smsauthcode_timestamp', time());
                             $sms_body = str_replace('%password%', $sms_authcode, $sms_onetime_password_body);
+
+                            $result = $LMS->addMessage(array(
+                                'type' => MSG_SMS,
+                                'subject' => trans('SMS authorization code for document confirmation'),
+                                'body' => $sms_body,
+                                'recipients' => array(
+                                    0 => array(
+                                        'id' => $SESSION->id,
+                                        'phone' => implode(',', $sms_recipients),
+                                    ),
+                                ),
+                            ));
+                            $msgid = $result['id'];
+                            $msgitems = $result['items'];
+
                             foreach ($sms_recipients as $sms_recipient) {
-                                $res = $LMS->SendSMS($sms_recipient, $sms_body, null, $sms_options);
-                                if ($res['status'] == MSG_ERROR) {
+                                $res = $LMS->SendSMS($sms_recipient, $sms_body, $msgitems[$SESSION->id][$sms_recipient], $sms_options);
+
+                                if (is_int($res)) {
+                                    $status = $res;
+                                    $send_errors = array();
+                                } elseif (is_string($res)) {
+                                    $status = MSG_ERROR;
+                                    $send_errors = array($res);
+                                } else {
+                                    $status = $res['status'];
+                                    $send_errors = isset($res['errors']) ? $res['errors'] : array();
+                                }
+
+                                if ($status == MSG_ERROR) {
                                     $errors = array_merge($errors, $res['errors']);
+                                }
+
+                                if ($status == MSG_SENT || isset($res['id']) || !empty($send_errors)) {
+                                    $DB->Execute(
+                                        'UPDATE messageitems SET status = ?, lastdate = ?NOW?,
+                                            error = ?, externalmsgid = ?
+                                        WHERE messageid = ?
+                                            AND customerid = ?
+                                            AND destination = ?',
+                                        array(
+                                            $status,
+                                            empty($send_errors) ? null : implode(', ', $send_errors),
+                                            !is_array($res) || empty($res['id']) ? null : $res['id'],
+                                            $msgid,
+                                            $SESSION->id,
+                                            $sms_recipient,
+                                        )
+                                    );
                                 }
                             }
                         } else {
@@ -182,6 +227,7 @@ function module_main()
 
                                 if (!empty($mail_sender_address)) {
                                     $customerinfo = $LMS->GetCustomer($SESSION->id);
+                                    $fullnumber = $LMS->getDocumentFullNumber($documentid);
 
                                     if (!empty($mail_recipient) && !empty($mail_subject) && !empty($mail_body)) {
                                         // operator notification
@@ -191,6 +237,7 @@ function module_main()
                                                 'customerinfo' => $customerinfo,
                                                 'document' => array(
                                                     'id' => $documentid,
+                                                    'fullnumber' =>  $fullnumber,
                                                     'attachmentids' => $attachmentids,
                                                 ),
                                             )
@@ -201,16 +248,37 @@ function module_main()
                                                 'customerinfo' => $customerinfo,
                                                 'document' => array(
                                                     'id' => $documentid,
+                                                    'fullnumber' =>  $fullnumber,
                                                     'attachmentids' => $attachmentids,
                                                 ),
                                             )
                                         );
-                                        $LMS->SendMail($mail_recipient, array(
+
+                                        $document = $DB->GetRow(
+                                            'SELECT u.email AS creatoremail
+                                            FROM users u
+                                            JOIN documents d ON d.userid = u.id
+                                            WHERE d.id = ?
+                                                AND (u.ntype & ?) > 0
+                                                AND u.email <> ?',
+                                            array(
+                                                $documentid,
+                                                MSG_MAIL,
+                                                '',
+                                            )
+                                        );
+
+                                        $headers = array(
                                             'From' => ($mail_sender_name ? '"' . $mail_sender_name . '" ' : '') . '<' . $mail_sender_address . '>',
-                                            'To' => $mail_recipient,
                                             'Subject' => $mail_subject,
                                             'X-LMS-Format' => $mail_format,
-                                        ), $mail_body);
+                                        );
+                                        foreach (explode(',', $LMS->documentCommitParseNotificationRecipient($mail_recipient, $document)) as $recipient) {
+                                            if (!empty($recipient) && check_email($recipient)) {
+                                                $headers['To'] = $recipient;
+                                                $LMS->SendMail($recipient, $headers, $mail_body);
+                                            }
+                                        }
                                     }
 
                                     $mail_format = ConfigHelper::getConfig('userpanel.signed_document_scan_customer_notification_mail_format', 'text');
@@ -224,6 +292,7 @@ function module_main()
                                                 'customerinfo' => $customerinfo,
                                                 'document' => array(
                                                     'id' => $documentid,
+                                                    'fullnumber' =>  $fullnumber,
                                                     'attachmentids' => $attachmentids,
                                                 ),
                                             )
@@ -234,6 +303,7 @@ function module_main()
                                                 'customerinfo' => $customerinfo,
                                                 'document' => array(
                                                     'id' => $documentid,
+                                                    'fullnumber' =>  $fullnumber,
                                                     'attachmentids' => $attachmentids,
                                                 ),
                                             )
@@ -317,7 +387,7 @@ function module_main()
     }
 
     $documents = $DB->GetAll('SELECT d.id, d.number, d.type, c.title, c.fromdate, c.todate, 
-		    c.description, n.template, d.closed, d.cdate, d.confirmdate
+		    c.description, n.template, d.closed, d.cdate, d.sdate, d.confirmdate, d.customerid
 		FROM documentcontents c
 		JOIN documents d ON (c.docid = d.id)
 		LEFT JOIN numberplans n ON (d.numberplanid = n.id)
@@ -332,6 +402,25 @@ function module_main()
         foreach ($documents as &$doc) {
             $doc['attachments'] = $DB->GetAllBykey('SELECT * FROM documentattachments WHERE docid = ?
 				ORDER BY type DESC, filename', 'id', array($doc['id']));
+
+            switch ($doc['closed']) {
+                case DOC_CLOSED_AFTER_CUSTOMER_SMS:
+                    $doc['confirm_type'] = DOC_CLOSED_AFTER_CUSTOMER_SMS;
+                    $doc['confirm_date'] = $doc['sdate'];
+                    break;
+                case DOC_CLOSED_AFTER_CUSTOMER_SCAN:
+                    $doc['confirm_type'] = DOC_CLOSED_AFTER_CUSTOMER_SCAN;
+                    $doc['confirm_date'] = 0;
+                    foreach ($doc['attachments'] as $attachment) {
+                        if ($attachment['type'] == -1 && $attachment['cdate'] > $doc['confirm_date']) {
+                            $doc['confirm_date'] = $attachment['cdate'];
+                        }
+                    }
+                    break;
+                default:
+                    $doc['confirm_type'] = $doc['confirm_date'] = 0;
+                    break;
+            }
         }
     }
 
@@ -468,14 +557,14 @@ if (defined('USERPANEL_SETUPMODE')) {
             'new_document_customer_notification_mail_subject' => CONFIG_TYPE_RICHTEXT,
             'new_document_customer_notification_mail_body' => CONFIG_TYPE_RICHTEXT,
             'new_document_customer_notification_sms_body' => CONFIG_TYPE_RICHTEXT,
-            'signed_document_scan_operator_notification_mail_recipient' => CONFIG_TYPE_RICHTEXT,
+            'signed_document_scan_operator_notification_mail_recipient' => CONFIG_TYPE_EMAILS,
             'signed_document_scan_operator_notification_mail_format' => CONFIG_TYPE_NONE,
             'signed_document_scan_operator_notification_mail_subject' => CONFIG_TYPE_RICHTEXT,
             'signed_document_scan_operator_notification_mail_body' => CONFIG_TYPE_RICHTEXT,
             'signed_document_scan_customer_notification_mail_format' => CONFIG_TYPE_NONE,
             'signed_document_scan_customer_notification_mail_subject' => CONFIG_TYPE_RICHTEXT,
             'signed_document_scan_customer_notification_mail_body' => CONFIG_TYPE_RICHTEXT,
-            'document_approval_operator_notification_mail_recipient' => CONFIG_TYPE_EMAIL,
+            'document_approval_operator_notification_mail_recipient' => CONFIG_TYPE_EMAILS,
             'document_approval_operator_notification_mail_format' => CONFIG_TYPE_NONE,
             'document_approval_operator_notification_mail_subject' => CONFIG_TYPE_RICHTEXT,
             'document_approval_operator_notification_mail_body' => CONFIG_TYPE_RICHTEXT,
@@ -505,6 +594,17 @@ if (defined('USERPANEL_SETUPMODE')) {
                     break;
                 case CONFIG_TYPE_EMAIL:
                     $value = check_email($moduleconfig[$variable]) ? $moduleconfig[$variable] : '';
+                    break;
+                case CONFIG_TYPE_EMAILS:
+                    $emails = array();
+                    foreach (explode(',', $moduleconfig[$variable]) as $email) {
+                        $email = trim($email);
+                        if (!strlen($email) || !check_email($email) && !preg_match('/^%[a-z_]+%$/', $email)) {
+                            continue;
+                        }
+                        $emails[] = $email;
+                    }
+                    $value = implode(',', $emails);
                     break;
                 case CONFIG_TYPE_NONE:
                     $mail_format = str_replace('_mail_format', '_mail_body', $variable);

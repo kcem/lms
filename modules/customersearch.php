@@ -85,6 +85,16 @@ if (!isset($_POST['flags'])) {
 }
 $SESSION->save('cslf', $flags);
 
+if (!isset($_POST['hidessn'])) {
+    $SESSION->restore('cshidessn', $hidessn);
+    if (!isset($hidessn)) {
+        $hidessn = 1;
+    }
+} else {
+    $hidessn = intval($_POST['hidessn']);
+}
+$SESSION->save('cshidessn', $hidessn);
+
 if (!isset($_POST['fk'])) {
     $SESSION->restore('cslfk', $flagsqlskey);
 } else {
@@ -109,7 +119,7 @@ $SESSION->save('cslkarma', $karma);
 if (!isset($_POST['n'])) {
     $SESSION->restore('csln', $network);
 } else if ($_POST['n'] == 'all') {
-        $network = array();
+    $network = array();
 } else {
     $network = Utils::filterIntegers($_POST['n']);
 }
@@ -117,6 +127,8 @@ $SESSION->save('csln', $network);
 
 if (!isset($_POST['g'])) {
     $SESSION->restore('cslg', $customergroup);
+} else if ($_POST['g'] == 'all') {
+    $customergroup = array();
 } else {
     if (count($_POST['g']) == 1 && intval($_POST['g'][0]) <= 0) {
         $customergroup = reset($_POST['g']);
@@ -133,6 +145,13 @@ if (!isset($_POST['cgk'])) {
 }
 $SESSION->save('cslcgk', $customergroupsqlskey);
 
+if (!isset($_POST['cgnot'])) {
+    $SESSION->restore('cslcgnot', $customergroupnegation);
+} else {
+    $customergroupnegation = !empty($_POST['cgnot']);
+}
+$SESSION->save('cslcgnot', $customergroupnegation);
+
 if (!isset($_POST['k'])) {
     $SESSION->restore('cslk', $sqlskey);
 } else {
@@ -147,6 +166,13 @@ if (!isset($_POST['ng'])) {
 }
 $SESSION->save('cslng', $nodegroup);
 
+if (!isset($_POST['ngnot'])) {
+    $SESSION->restore('cslngnot', $nodegroupnegation);
+} else {
+    $nodegroupnegation = !empty($_POST['ngnot']);
+}
+$SESSION->save('cslngnot', $nodegroupnegation);
+
 if (!isset($_POST['d'])) {
     $SESSION->restore('csld', $division);
 } else {
@@ -156,11 +182,18 @@ $SESSION->save('csld', $division);
 
 if (isset($_GET['search'])) {
     $layout['pagetitle'] = trans('Customer Search Results');
+    if (!isset($time)) {
+        $time = null;
+    }
+    if (!isset($days)) {
+        $days = null;
+    }
     $customerlist = $LMS->GetCustomerList(compact(
         "order",
         "state",
         "statesqlskey",
         "customergroupsqlskey",
+        "customergroupnegation",
         "flags",
         "flagsqlskey",
         "consents",
@@ -171,6 +204,7 @@ if (isset($_GET['search'])) {
         "time",
         "days",
         "sqlskey",
+        "nodegroupnegation",
         "nodegroup",
         "division"
     ));
@@ -182,6 +216,7 @@ if (isset($_GET['search'])) {
     $listdata['over'] = $customerlist['over'];
     $listdata['state'] = $state;
     $listdata['flags'] = $flags;
+    $listdata['hidessn'] = $hidessn;
     $listdata['karma'] = $karma;
     $listdata['network'] = $network;
     $listdata['customergroup'] = empty($customergroup) ? array() : $customergroup;
@@ -240,6 +275,7 @@ if (isset($_GET['search'])) {
 
     $listdata['state'] = $state;
     $listdata['flags'] = $flags;
+    $listdata['hidessn'] = $hidessn;
     $listdata['karma'] = $karma;
     $listdata['network'] = $network;
     $listdata['customergroup'] = empty($customergroup) ? array() : $customergroup;
@@ -259,7 +295,9 @@ if (isset($_GET['search'])) {
     $SMARTY->assign('k', $sqlskey);
     $SMARTY->assign('sk', $statesqlskey);
     $SMARTY->assign('cgk', $customergroupsqlskey);
+    $SMARTY->assign('cgnot', $customergroupnegation);
     $SMARTY->assign('fk', $flagsqlskey);
+    $SMARTY->assign('ngnot', $nodegroupnegation);
     $SMARTY->assign('karma', $karma);
     $SMARTY->display('customer/customersearch.html');
 }

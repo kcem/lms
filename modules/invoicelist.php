@@ -24,7 +24,14 @@
  *  $Id$
  */
 
-$proforma = isset($_GET['proforma']) ? 1 : 0;
+if (isset($_GET['proforma'])) {
+    $proforma = 1;
+} elseif (isset($_GET['page']) || !empty($_POST)) {
+    $SESSION->restore('ilproforma', $proforma);
+} else {
+    $proforma = 0;
+}
+$SESSION->save('ilproforma', $proforma);
 
 $layout['pagetitle'] = $proforma ? trans('Pro Forma Invoice List') : trans('Invoices List');
 $SESSION->add_history_entry();
@@ -160,11 +167,14 @@ if (isset($_POST['search'])) {
 $SESSION->save('ilre', $re);
 
 if ($c == 'cdate' && $s && preg_match('/^[0-9]{4}\/[0-9]{2}\/[0-9]{2}$/', $s)) {
-    list($year, $month, $day) = explode('/', $s);
+    list ($year, $month, $day) = explode('/', $s);
     $s = mktime(0, 0, 0, $month, $day, $year);
 } elseif ($c == 'month' && $s && preg_match('/^[0-9]{4}\/[0-9]{2}$/', $s)) {
-    list($year, $month) = explode('/', $s);
-        $s = mktime(0, 0, 0, $month, 1, $year);
+    list ($year, $month) = explode('/', $s);
+    $s = mktime(0, 0, 0, $month, 1, $year);
+} elseif ($c == 'year' && $s && preg_match('/^[0-9]{4}$/', $s)) {
+    $year = intval($s);
+    $s = mktime(0, 0, 0, 1, 1, $year);
 }
 
 $total = intval($LMS->GetInvoiceList(array('search' => $s, 'cat' => $c, 'group' => $g, 'exclude'=> $ge,
@@ -173,12 +183,20 @@ $total = intval($LMS->GetInvoiceList(array('search' => $s, 'cat' => $c, 'group' 
     'customer' => $cid)));
 
 $limit = intval(ConfigHelper::getConfig('phpui.invoicelist_pagelimit', 100));
-$page = !isset($_GET['page']) ? ceil($total / $limit) : $_GET['page'];
+if (isset($_GET['page'])) {
+    $page = $_GET['page'];
+} elseif ($SESSION->is_set('ilpage')) {
+    $SESSION->restore('ilpage', $page);
+} else {
+    $page = ceil($total / $limit);
+}
 if (empty($page) || $page > ceil($total / $limit)) {
     $page = 1;
 }
 $page = intval($page);
 $offset = ($page - 1) * $limit;
+
+$SESSION->save('ilpage', $page);
 
 $invoicelist = $LMS->GetInvoiceList(array('search' => $s, 'cat' => $c, 'group' => $g, 'exclude'=> $ge,
     'numberplan' => $np, 'division' => $div, 'hideclosed' => $h, 'order' => $o, 'limit' => $limit, 'offset' => $offset,

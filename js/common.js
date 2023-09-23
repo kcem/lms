@@ -209,6 +209,8 @@ if ( typeof $ !== 'undefined' ) {
 
             var box = $( this ).closest( ".lms-ui-address-box" );
 
+			var addressType = parseInt(box.closest('.location-box-expandable').find('[data-address="address_type"]').val());
+
             // if teryt checkbox is not checked during teryt button click then
             // we check it automatically for user convenience
             if ( ! box.find("input[data-address='teryt-checkbox']").is(':checked') ) {
@@ -224,9 +226,10 @@ if ( typeof $ !== 'undefined' ) {
             var street = box.find("input[data-address='street-hidden']").val();
 
 			openPopupWindow({
-				url: '?m=chooselocation&city=' + city + '&street=' + street + "&boxid=" + box.attr('id'),
+				url: '?m=chooselocation' + (addressType ? '&addresstype=' + addressType : '') +
+					'&city=' + city + '&street=' + street + "&boxid=" + box.attr('id'),
 				selector: this,
-				title: $t("Choose TERRIT location"),
+				title: $t("Choose TERYT location"),
 				onLoaded: function() {
 					$('#search [name="searchcity"]').focus();
 				}
@@ -296,6 +299,9 @@ function sendvalue(targetfield, value)
 	targetfield.value = value;
 	// close popup
 	window.parent.parent.popclick();
+	if (targetfield.className.indexOf('lms-ui-advanced-select') !== -1) {
+		targetfield.dispatchEvent(new Event('chosen:updated'))
+	}
 	targetfield.dispatchEvent(new Event('change'))
 	targetfield.focus();
 }
@@ -595,7 +601,8 @@ function changeMacFormat(id)
 	}
 	var curmac = elem.innerHTML.trim();
 	var macpatterns = [
-		/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/gi,
+		/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/g,
+		/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/g,
 		/^([0-9a-f]{2}-){5}[0-9a-f]{2}$/gi,
 		/^([0-9a-f]{4}\.){2}[0-9a-f]{4}$/gi,
 		/^([0-9a-f]{4}-){2}[0-9a-f]{4}$/gi,
@@ -612,21 +619,25 @@ function changeMacFormat(id)
 	i = parseInt(i);
 	switch (i) {
 		case 0:
-			curmac = curmac.replace(/:/g, '-');
+			curmac = curmac.toLowerCase();
 			break;
 		case 1:
+			curmac = curmac.replace(/:/g, '-');
+			curmac = curmac.toUpperCase();
+			break;
+		case 2:
 			curmac = curmac.replace(/-/g, '');
 			curmac = curmac.toLowerCase();
 			curmac = curmac.replace(/^([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})$/gi, '$1.$2.$3');
 			break;
-		case 2:
+		case 3:
 			curmac = curmac.replace(/\./g, '-');
 			break;
-		case 3:
+		case 4:
 			curmac = curmac.replace(/-/g, '');
 			curmac = curmac.toUpperCase();
 			break;
-		case 4:
+		case 5:
 			curmac = curmac.replace(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/gi, '$1:$2:$3:$4:$5:$6');
 			break;
 	}
@@ -773,8 +784,11 @@ function getCustomerAddresses( id, on_success ) {
  * \param string latitude_id id of longitude input
  */
 function location_str(data) {
+	var terc = data.hasOwnProperty('terc') ? data.terc : null;
 	var city = data.city;
+	var simc = data.hasOwnProperty('simc') ? data.simc : null;
 	var street = data.street;
+	var ulic = data.hasOwnProperty('ulic') ? data.ulic : null;
 	var house = data.house;
 	var flat = data.flat;
 	var zip = data.hasOwnProperty('zip') ? data.zip : null;
@@ -814,7 +828,26 @@ function location_str(data) {
 	}
 
 	if (teryt) {
-		location = $t('$a (TERRIT)', location);
+		if (lmsSettings.terytShowNumericIdentifiers) {
+			if (ulic) {
+				location = $t(
+					'$a ($b)',
+					location,
+					'TERC: ' + terc + ',' +
+					' SIMC: ' + simc + ',' +
+					' ULIC: ' + ulic
+				)
+			} else {
+				location = $t(
+					'$a ($b)',
+					location,
+					'TERC: ' + terc + ',' +
+					' SIMC: ' + simc
+				)
+			}
+		} else {
+			location = $t('$a (TERYT)', location);
+		}
 	}
 
 	return location;
@@ -903,6 +936,8 @@ function osm_get_zip_code(search, on_success) {
 		if (typeof(on_success) == 'function') {
 			if (data.length && data[0].hasOwnProperty('address') && data[0].address.hasOwnProperty('postcode')) {
 				on_success(data[0].address.postcode);
+			} else {
+				on_success('');
 			}
 		}
 	});
@@ -910,7 +945,18 @@ function osm_get_zip_code(search, on_success) {
 
 function pna_get_zip_code(search, on_success) {
 	$.ajax({
-		url: '?m=zipcode&api=1',
+		url: '?m=zipcode&api=1&provider=pna',
+		data: search
+	}).done(function(data) {
+		if (typeof(on_success) == 'function') {
+			on_success(data);
+		}
+	});
+}
+
+function prg_get_zip_code(search, on_success) {
+	$.ajax({
+		url: '?m=zipcode&api=1&provider=prg',
 		data: search
 	}).done(function(data) {
 		if (typeof(on_success) == 'function') {
@@ -1027,3 +1073,10 @@ var financeDecimals = {
 		return Math.floor((n + r) * o) / o;
 	}
 };
+
+function financeRound(value, precision) {
+	let roundedValue = parseFloat(value.replace(/[\,]+/, '.'));
+	roundedValue = financeDecimals.round(roundedValue, precision);
+	roundedValue = roundedValue.toFixed(precision).replace(/[\.]+/, ',');
+	return roundedValue;
+}

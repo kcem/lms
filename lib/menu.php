@@ -214,6 +214,7 @@ $menu = array(
         'VoIP' => array(
             'name' => trans('VoIP'),
             'css' => 'lms-ui-icon-phone',
+            'link' => '?m=voipaccountlist&init=1',
             'tip' => trans('VoIP Management'),
             'accesskey' =>'v',
             'prio' => 11,
@@ -225,19 +226,19 @@ $menu = array(
                     'prio' => 10,
                 ),
                 'voipaccountlist' => array(
-                    'name' => trans('Accounts List'),
-                    'link' => '?m=voipaccountlist',
+                    'name' => trans('<!voip>Accounts'),
+                    'link' => '?m=voipaccountlist&init=1',
                     'tip' => trans('List of Accounts'),
                     'prio' => 20,
                 ),
                 'voipaccountbillinglist' => array(
-                    'name' => trans('Billing list'),
+                    'name' => trans('<!voip>Billings'),
                     'link' => '?m=voipaccountbillinglist',
                     'tip' => trans('Allows you to view billing list'),
                     'prio' => 30,
                 ),
                 'tarifflist' => array(
-                    'name' => trans('Subscription List'),
+                    'name' => trans('<!voip>Subscriptions'),
                     'link' => '?m=tarifflist&t=' . SERVICE_PHONE,
                     'tip' => trans('Phone tariff list'),
                     'prio' => 40,
@@ -319,17 +320,23 @@ $menu = array(
                     'tip' => trans('Network map display'),
                     'prio' => 70,
                 ),
-                'netdevprint' => array(
-                    'name' => trans('Reports'),
-                    'link' => '?m=netdevprint',
-                    'tip' => trans('Lists and reports printing'),
-                    'prio' => 80,
-                ),
                 'vlanlist' => array(
                     'name' => trans('VLAN List'),
                     'link' => '?m=vlanlist',
                     'tip' => trans('VLAN List'),
+                    'prio' => 80,
+                ),
+                'netranges' => array(
+                    'name' => trans('Network ranges'),
+                    'link' => '?m=netranges',
+                    'tip' => trans('Network ranges'),
                     'prio' => 90,
+                ),
+                'netdevprint' => array(
+                    'name' => trans('Reports'),
+                    'link' => '?m=netdevprint',
+                    'tip' => trans('Lists and reports printing'),
+                    'prio' => 100,
                 ),
             ),
         ),
@@ -473,23 +480,23 @@ $menu = array(
                     'tip' => trans('Financial data export to external systems'),
                     'prio' => 160,
                 ),
-                'print' => array(
-                    'name' => trans('Reports'),
-                    'link' => '?m=print',
-                    'tip' => trans('Lists and reports printing'),
+                'tarifftaglist' => array(
+                    'name' => trans('Tags list'),
+                    'link' => '?m=tarifftaglist',
+                    'tip' => trans('Tags list'),
                     'prio' => 170,
                 ),
                 'tarifftagadd' => array(
                     'name' => trans('New tag'),
                     'link' => '?m=tarifftagadd',
                     'tip' => trans('Allows you to add new tag'),
-                    'prio' => 140,
+                    'prio' => 180,
                 ),
-                'tarifftaglist' => array(
-                    'name' => trans('Tags list'),
-                    'link' => '?m=tarifftaglist',
-                    'tip' => trans('Tags list'),
-                    'prio' => 150,
+                'print' => array(
+                    'name' => trans('Reports'),
+                    'link' => '?m=print',
+                    'tip' => trans('Lists and reports printing'),
+                    'prio' => 190,
                 ),
             ),
         ),
@@ -925,7 +932,7 @@ if (ConfigHelper::checkConfig('phpui.ewx_support')) {
     );
 }
 
-if (ConfigHelper::checkConfig('phpui.logging')) {
+if (ConfigHelper::checkConfig('logs.enabled')) {
     $menu['log'] = array(
         'name' => trans('Transaction Log'),
         'css' => 'lms-ui-icon-archiveview',
