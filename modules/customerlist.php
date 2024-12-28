@@ -61,6 +61,8 @@ if ($api) {
 
     if (isset($_GET['s'])) {
         $filter['state'] = $_GET['s'];
+    } else {
+	$filter['state'] = intval(ConfigHelper::getConfig('customers.default_state', 72));
     }
 
     if (isset($_GET['n'])) {
