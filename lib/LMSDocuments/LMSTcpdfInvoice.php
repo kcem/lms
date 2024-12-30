@@ -58,7 +58,7 @@ class LMSTcpdfInvoice extends LMSInvoice
         $show_tax_category = ConfigHelper::checkConfig('invoices.show_tax_category', true) && !empty($this->data['taxcategories']);
 
         /* set the line width and headers font */
-        $this->backend->SetFillColor(255, 255, 255);
+        $this->backend->SetFillColor(200, 200, 200);
         $this->backend->SetTextColor(0);
         $this->backend->SetDrawColor(0, 0, 0);
         $this->backend->SetLineWidth(0.1);
@@ -536,7 +536,7 @@ class LMSTcpdfInvoice extends LMSInvoice
             $buyer .= trans('SSN') . ': ' . $this->data['ssn'] . '<br>';
         }
         if (ConfigHelper::checkConfig('invoices.show_customerid', true)) {
-            $buyer .= '<b>' . trans('Customer No.:') . ' ' . $this->data['customerid'] . '</b><br>';
+            $buyer .= '<b>' . trans('Customer No.:') . ' ' . sprintf('%04d', $this->data['customerid']) . '</b><br>';
         }
         $this->backend->SetFont(null, '', 8);
         $this->backend->writeHTMLCell(80, '', '', '', $buyer, 0, 1, 0, true, 'L');
