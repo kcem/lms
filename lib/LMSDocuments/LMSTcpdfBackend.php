@@ -43,7 +43,7 @@ class LMSTcpdfBackend extends LMSTCPDF
         $this->SetProducer('LMS Developers');
         $this->SetSubject($title);
         $this->SetCreator('LMS' . (isset($layout['lmsv']) ? ' ' . $layout['lmsv'] : ''));
-        $this->SetDisplayMode('fullwidth', 'SinglePage', 'UseNone');
+        $this->SetDisplayMode(150, 'SinglePage', 'UseNone');
 
         $this->SetMargins(PDF_MARGIN_LEFT, PDF_MARGIN_TOP, PDF_MARGIN_RIGHT);
         $this->SetAutoPageBreak(true, PDF_MARGIN_BOTTOM);
