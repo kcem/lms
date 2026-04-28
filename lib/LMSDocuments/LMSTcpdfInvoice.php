@@ -30,6 +30,7 @@ class LMSTcpdfInvoice extends LMSInvoice
 {
     // default font
     public const TCPDF_FONT = 'liberationsans';
+    private const KSEF_QR_CODE_SIZE = 20.5;
 
     private $use_alert_color;
 
@@ -72,7 +73,7 @@ class LMSTcpdfInvoice extends LMSInvoice
         $show_tax_category = ConfigHelper::checkConfig('invoices.show_tax_category', true) && !empty($this->data['taxcategories']);
 
         /* set the line width and headers font */
-        $this->backend->SetFillColor(255, 255, 255);
+        $this->backend->SetFillColor(200, 200, 200);
         $this->backend->SetTextColor(0);
         $this->backend->SetDrawColor(0, 0, 0);
         $this->backend->SetLineWidth(0.1);
@@ -434,7 +435,7 @@ class LMSTcpdfInvoice extends LMSInvoice
     protected function invoice_date()
     {
         $this->backend->SetFont(null, '', 8);
-        $this->backend->writeHTMLCell(0, 0, '', 10, trans('Settlement date:') . ' <b>' . date("d.m.Y", $this->data['cdate']) . '</b>', 0, 1, 0, true, 'R');
+        $this->backend->writeHTMLCell(0, 0, '', 8, trans('Settlement date:') . ' <b>' . date("d.m.Y", $this->data['cdate']) . '</b>', 0, 1, 0, true, 'R');
         if (!ConfigHelper::checkConfig('invoices.hide_sale_date')) {
             $this->backend->writeHTMLCell(0, 0, '', '', trans('Sale date:') . ' <b>' . date("d.m.Y", $this->data['sdate']) . '</b>', 0, 1, 0, true, 'R');
         }
@@ -448,8 +449,10 @@ class LMSTcpdfInvoice extends LMSInvoice
             $y += 3;
         }
 
-        if (!empty($this->ksef_invoice_header)) {
-            $y += 5;
+        if (!empty($this->ksef_invoice_header)
+            || !empty($this->data['ksefenvironment'])
+            && ($this->ksef_offline_support || !empty($this->data['ksefnumber']) && !empty($this->data['ksefstatus']))) {
+            $y += 12;
         }
 
         $this->backend->SetY($y);
@@ -539,7 +542,7 @@ class LMSTcpdfInvoice extends LMSInvoice
             $seller .= $line . '<br>';
         }
         $this->backend->Ln(0);
-        $this->backend->writeHTMLCell(80, '', '', 45, $seller, 0, 1, 0, true, 'L');
+        $this->backend->writeHTMLCell(80, '', '', 54, $seller, 0, 1, 0, true, 'L');
     }
 
     protected function invoice_buyer()
@@ -565,7 +568,7 @@ class LMSTcpdfInvoice extends LMSInvoice
             $buyer .= trans('SSN') . ': ' . $this->data['ssn'] . '<br>';
         }
         if (ConfigHelper::checkConfig('invoices.show_customerid', true)) {
-            $buyer .= '<b>' . trans('Customer No.:') . ' ' . $this->data['customerid'] . '</b><br>';
+            $buyer .= '<b>' . trans('Customer No.:') . ' ' . sprintf('%04d', $this->data['customerid']) . '</b><br>';
         }
         $this->backend->SetFont(null, '', 8);
         $this->backend->writeHTMLCell(80, '', '', '', $buyer, 0, 1, 0, true, 'L');
@@ -595,7 +598,7 @@ class LMSTcpdfInvoice extends LMSInvoice
             }
 
             $this->backend->SetFont(null, 'B', 10);
-            $this->backend->writeHTMLCell(80, '', 125, 50, $postbox, 0, 1, 0, true, 'L');
+            $this->backend->writeHTMLCell(80, '', 125, 54, $postbox, 0, 1, 0, true, 'L');
         }
 
         if (ConfigHelper::checkConfig('invoices.customer_credentials', true)) {
@@ -943,14 +946,11 @@ class LMSTcpdfInvoice extends LMSInvoice
             $this->backend->SetFont(null, '', 8);
             //$h = $this->backend->getStringHeight(0, $tmp);
             $tmp = mb_ereg_replace('\r?\n', '<br>', $tmp);
-            if (($this->data['doctype'] != DOC_DNOTE && ConfigHelper::checkConfig('invoices.qr2pay')
+            $qr2pay = ($this->data['doctype'] != DOC_DNOTE && ConfigHelper::checkConfig('invoices.qr2pay')
                 || $this->data['doctype'] == DOC_DNOTE && ConfigHelper::checkConfig('notes.qr2pay', ConfigHelper::checkConfig('invoices.qr2pay')))
-                && !isset($this->data['rebate'])) {
-                $width = 150;
-            } else {
-                $width = 0;
-            }
-            $this->backend->Ln(5);
+                && !isset($this->data['rebate']);
+            $width = 0;
+            $this->backend->Ln($qr2pay ? 14 : 5);
             $this->backend->writeHTMLCell($width, 0, '', '', $tmp, 0, 1, 0, true, 'C');
         }
     }
@@ -1112,8 +1112,12 @@ class LMSTcpdfInvoice extends LMSInvoice
 
         $customerid = $this->data['customerid'];
 
+        $qrSize = 24.6;
+        $textWidth = 156;
+        $textY = $y + 5;
+
         $this->backend->SetFont(null, '', 7);
-        $this->backend->writeHTMLCell(160, 0, '', '', trans("&nbsp; <BR> Scan and Pay <BR> You can make a transfer simply and quickly using your phone. <BR> To make a transfer, please scan QRcode on you smartphone in your bank's application."), 0, 1, 0, true, 'R');
+        $this->backend->writeHTMLCell($textWidth, 0, '', $textY, trans("&nbsp; <BR> Scan and Pay <BR> You can make a transfer simply and quickly using your phone. <BR> To make a transfer, please scan QRcode on you smartphone in your bank's application."), 0, 1, 0, true, 'R');
         $tmp = preg_replace('/[^0-9]/', '', $this->data['division_ten'])
             . '|'
             . 'PL'
@@ -1141,7 +1145,7 @@ class LMSTcpdfInvoice extends LMSInvoice
             )
             . '|||';
         $style['position'] = 'R';
-        $this->backend->write2DBarcode($tmp, 'QRCODE,M', $x, $y, 20, 20, $style);
+        $this->backend->write2DBarcode($tmp, 'QRCODE,M', $x, $y, $qrSize, $qrSize, $style);
         unset($tmp);
     }
 
@@ -1161,7 +1165,12 @@ class LMSTcpdfInvoice extends LMSInvoice
 
         $style['position'] = 'C';
 
-        $y = 5;
+        $qrSize = self::KSEF_QR_CODE_SIZE;
+        $labelY = function ($y) use ($qrSize) {
+            return $y + $qrSize + 1;
+        };
+
+        $y = 8;
         if ($this->jpk_flags) {
             $y += 3;
         }
@@ -1178,15 +1187,16 @@ class LMSTcpdfInvoice extends LMSInvoice
         }
 
         if (!empty($certificateUrl)) {
-            if (!empty($this->ksef_invoice_header)) {
-                $this->backend->SetFont(null, 'B', 10);
+            $header = $this->ksef_invoice_header ?: 'Kod weryfikujący KSeF';
+            if (!empty($header)) {
+                $this->backend->SetFont(null, 'B', 6);
 
                 $this->backend->writeHTMLCell(
                     '',
                     '',
                     '',
                     $y,
-                    $this->ksef_invoice_header,
+                    $header,
                     0,
                     1,
                     0,
@@ -1194,17 +1204,19 @@ class LMSTcpdfInvoice extends LMSInvoice
                     'C'
                 );
 
-                $y += 5;
+                $y += 4;
             }
 
             $pageWidth = $this->backend->getPageWidth();
+            $leftX = ($pageWidth / 2) - ($qrSize + 3);
+            $rightX = ($pageWidth / 2) + 3;
 
-            $this->backend->write2DBarcode($url, 'QRCODE,M', ($pageWidth / 2) - 23, $y, 20, 20);
+            $this->backend->write2DBarcode($url, 'QRCODE,M', $leftX, $y, $qrSize, $qrSize);
             $this->backend->writeHTMLCell(
-                20,
+                $qrSize,
                 '',
-                ($pageWidth / 2) - 23,
-                $y + 21,
+                $leftX,
+                $labelY($y),
                 '<a href="' . $url . '">OFFLINE</a>',
                 0,
                 1,
@@ -1213,12 +1225,12 @@ class LMSTcpdfInvoice extends LMSInvoice
                 'C'
             );
 
-            $this->backend->write2DBarcode($certificateUrl, 'QRCODE,M', ($pageWidth / 2) + 3, $y, 20, 20);
+            $this->backend->write2DBarcode($certificateUrl, 'QRCODE,M', $rightX, $y, $qrSize, $qrSize);
             $this->backend->writeHTMLCell(
-                20,
+                $qrSize,
                 '',
-                ($pageWidth / 2) + 3,
-                $y + 21,
+                $rightX,
+                $labelY($y),
                 '<a href="' . $certificateUrl . '">CERTYFIKAT</a>',
                 0,
                 1,
@@ -1227,15 +1239,16 @@ class LMSTcpdfInvoice extends LMSInvoice
                 'C'
             );
         } else {
-            if (!empty($this->ksef_invoice_header)) {
-                $this->backend->SetFont(null, 'B', 10);
+            $header = $this->ksef_invoice_header ?: 'Kod weryfikujący KSeF';
+            if (!empty($header)) {
+                $this->backend->SetFont(null, 'B', 6);
 
                 $this->backend->writeHTMLCell(
                     '',
                     '',
                     '',
                     $y,
-                    $this->ksef_invoice_header,
+                    $header,
                     0,
                     1,
                     0,
@@ -1243,10 +1256,10 @@ class LMSTcpdfInvoice extends LMSInvoice
                     'C'
                 );
 
-                $y += 5;
+                $y += 4;
             }
 
-            $this->backend->write2DBarcode($url, 'QRCODE,M', 0, $y, 20, 20, $style);
+            $this->backend->write2DBarcode($url, 'QRCODE,M', 0, $y, $qrSize, $qrSize, $style);
 
             $this->backend->SetFont(null, '', 5);
 
@@ -1254,7 +1267,7 @@ class LMSTcpdfInvoice extends LMSInvoice
                 '',
                 '',
                 '',
-                $y + 21,
+                $labelY($y),
                 '<a href="' . $url . '">' . (empty($this->data['ksefnumber']) || empty($this->data['ksefstatus']) ? 'OFFLINE' : $this->data['ksefnumber']) . '</a>',
                 0,
                 1,
