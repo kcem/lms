@@ -30,6 +30,7 @@ rtattachments/*
 *~
 *.swp
 *.swo
+.phpunit.result.cache
 
 # nodejs files
 **/node_modules
